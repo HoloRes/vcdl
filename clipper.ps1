@@ -1,4 +1,11 @@
-# Hololive covers are the only thing keeping me sane
+# Written and Tested by Sheer Curiosity
+
+# HoloClipper Revision 4 Version 5
+
+# REQUIRED BINARIES (BOTH MUST BE ADDED TO PATH)
+# -ffmpeg
+# -ffprobe
+# -youtube-dl
 
 # Define parameters
 param (

@@ -1,9 +1,10 @@
 # Written and Tested by Sheer Curiosity
 
-# HoloClipper Revision 5 Version 3
+# HoloClipper Revision 6 Version 1
 
 # REQUIRED BINARIES (BOTH MUST BE ADDED TO PATH)
 # -ffmpeg
+# -ffprobe
 # -youtube-dl
 
 # Define parameters
@@ -14,19 +15,21 @@ param (
     [string]$dlDir = ".",            # Defines the download directory for the final file     Options: Any Directory On Your PC
     [string]$timestampsIn = $null,   # Defines the timestamps to be clipped                  Options: Timestamps In This Format (Add Comma, No Space For Multiple Subclips): [xx:xx:xx-xx:xx:xx],[xx:xx:xx-xx:xx:xx]
     [string]$fileOutExt = "mkv",     # Defines the output file extension                     Options: Any Video Extensions Supported By FFMPEG
-    [string]$rescaleVideo = "false"  # True/False rescale video to 1080p                     Options: True, False
+    [string]$rescaleVideo = "false",  # True/False rescale video to 1080p                     Options: True, False
+    [string]$doNotStitch = "false"
 )
 
 # Define directory for temporary files
 $tempdir = Get-Location
 Install-module -Name PoshRSJob -Scope CurrentUser
+Get-RSJob | Remove-RSJob
 
 if (!$videotype -or !$inlink -or !$timestampsIn) {
     Throw "ERROR: Missing Parameters"
 }
 # Define "parser" function, which parses the input timestamps into a format
 # the script can work with
-function parser($clipstamps) {
+function parserCheck($clipstamps) {
     $clipTimestamps=$clipstamps.trim("[]")
     $clip1st1,$clip1st2=$clipTimestamps.split("-")
     $c1st1array=$clip1st1.split(":")
@@ -124,29 +127,17 @@ function parser($clipstamps) {
             $clipte1 = $clipte1 + 1
         }
     }
-    $cliptc1 = $clipte1 - $clipts1
-    $cliptc2 = $clipte2 - $clipts2
-    $cliptc3 = $clipte3 - $clipts3
-    $cliptc4 = $clipte4 - $clipts4
-    if ($cliptc3 -lt 0) {
-        $cliptc3 = $cliptc3 + 60
-        $cliptc2 = $cliptc2 - 1
-        if ($cliptc2 -lt 0) {
-            $cliptc2 = $cliptc2 + 60
-            $cliptc1 = $cliptc1 - 1
-        }
+    if (($clipte1.tostring().length) -eq 1) {
+        $clipte1 = "0$clipte1"
     }
-    if (($cliptc1.tostring().length) -eq 1) {
-        $cliptc1 = "0$cliptc1"
+    if (($clipte2.tostring().length) -eq 1) {
+        $clipte2 = "0$clipte2"
     }
-    if (($cliptc2.tostring().length) -eq 1) {
-        $cliptc2 = "0$cliptc2"
+    if (($clipte3.tostring().length) -eq 1) {
+        $clipte3 = "0$clipte3"
     }
-    if (($cliptc3.tostring().length) -eq 1) {
-        $cliptc3 = "0$cliptc3"
-    }
-    if (($cliptc4.tostring().length) -eq 1) {
-        $cliptc4 = "0$cliptc4"
+    if (($clipte4.tostring().length) -eq 1) {
+        $clipte4 = "0$clipte4"
     }
     if (($clipts1.tostring().length) -eq 1) {
         $clipts1 = "0$clipts1"
@@ -160,13 +151,99 @@ function parser($clipstamps) {
     if (($clipts4.tostring().length) -eq 1) {
         $clipts4 = "0$clipts4"
     }
-    $clipSps = "$clipts1`:$clipts2`:$clipts3.$clipts4"
-    $clipRt = "$cliptc1`:$cliptc2`:$cliptc3.$cliptc4"
-    return $clipSps, $clipRt
+    $clipSps = "$clipts1`:$clipts2`:$clipts3`:$clipts4"
+    $clipEps = "$clipte1`:$clipte2`:$clipte3`:$clipte4"
+    return $clipSps, $clipEps
+}
+
+$clipStamps=$timestampsIn.split(",")
+for ($i = 0; $i -lt $clipStamps.length; $i++) {
+    $parserOut += parserCheck $clipStamps[$i]
+}
+$startStamps = @()
+$endStamps = @()
+$fixedStartStamps = @()
+$fixedRuntimeStamps = @()
+for ($i = 0; $i -lt $parserOut.length; $i++) {
+    if ($i % 2 -eq 0) {
+        $startStamps += $parserOut[$i]
+    } else {
+        $endStamps += $parserOut[$i]
+    }
+}
+$finalStamps = @()
+$finalStamps += $startStamps[0]
+for ($i = 0; $i -lt $endStamps.length; $i++) {
+    if ($i -lt $endStamps.length - 1) {
+        $clipte = $endStamps[$i].split(":")
+        $clipts = $startStamps[$i+1].split(":")
+        if ($clipts[0] -le $clipte[0]) {
+            if ($clipts[1] -le $clipte[1]) {
+                if ($clipts[2] -le $clipte[2]) {
+                    # BELOW CONDITIONALS NOT USED IN GENERAL USAGE
+                    if ($clipts[3] -le $clipte[3]) {
+                    } else {
+                        $finalStamps += $endStamps[$i]
+                        $finalStamps += $startStamps[$i+1]
+                    }
+                } else {
+                    $finalStamps += $endStamps[$i]
+                    $finalStamps += $startStamps[$i+1]
+                }
+            } else {
+                $finalStamps += $endStamps[$i]
+                $finalStamps += $startStamps[$i+1]
+            }
+        } else {
+            $finalStamps += $endStamps[$i]
+            $finalStamps += $startStamps[$i+1]
+        }
+    }
+}
+$finalStamps += $endStamps[$endStamps.length - 1]
+for ($i = 0; $i -lt $finalStamps.length; $i++) {
+    if ($i % 2 -eq 0) {
+        $startElements=$finalStamps[$i].split(":")
+        $endElements=$finalStamps[$i+1].split(":")
+        $clipts1 = [int]$startElements[0] #1ts1
+        $clipts2 = [int]$startElements[1] #1ts2
+        $clipts3 = [int]$startElements[2] #1ts3
+        $clipts4 = [int]$startElements[3] #1ts4
+        $clipte1 = [int]$endElements[0] #1te1
+        $clipte2 = [int]$endElements[1] #1te2
+        $clipte3 = [int]$endElements[2] #1te3
+        $clipte4 = [int]$endElements[3] #1te4
+        $cliptc1 = $clipte1 - $clipts1
+        $cliptc2 = $clipte2 - $clipts2
+        $cliptc3 = $clipte3 - $clipts3
+        $cliptc4 = $clipte4 - $clipts4
+        if ($cliptc3 -lt 0) {
+            $cliptc3 = $cliptc3 + 60
+            $cliptc2 = $cliptc2 - 1
+            if ($cliptc2 -lt 0) {
+                $cliptc2 = $cliptc2 + 60
+                $cliptc1 = $cliptc1 - 1
+            }
+        }
+        if (($cliptc1.tostring().length) -eq 1) {
+            $cliptc1 = "0$cliptc1"
+        }
+        if (($cliptc2.tostring().length) -eq 1) {
+            $cliptc2 = "0$cliptc2"
+        }
+        if (($cliptc3.tostring().length) -eq 1) {
+            $cliptc3 = "0$cliptc3"
+        }
+        if (($cliptc4.tostring().length) -eq 1) {
+            $cliptc4 = "0$cliptc4"
+        }
+        $fixedStartStamps += "$($startElements[0])`:$($startElements[1])`:$($startElements[2])`.$($startElements[3])"
+        $fixedRuntimeStamps += "$cliptc1`:$cliptc2`:$cliptc3`.$cliptc4"
+    }
 }
 $clipper = {
-    $miniclipnum = $timestampsIn.split(",").length
-    $parserNum = $timestampsIn.split(",").length
+    $miniclipnum = $fixedStartStamps.length
+    $parserNum = $fixedStartStamps.length
     $clipsSps = @()
     $clipsRt = @()
     $clipnum = 0
@@ -174,7 +251,6 @@ $clipper = {
     $mapperNum = 0
     $ytdlAttempts = 0
     $valid = 1
-    $clipStamps=$timestampsIn.split(",")
     if ($videotype.toLower() -eq "youtube") {
         while (!$glinks -and $ytdlAttempts -lt 5) {
             $glinks = youtube-dl -g "$inlink"
@@ -202,9 +278,8 @@ $clipper = {
         }
     }
     while ($parserNum -gt 0) {
-            $parserOut = parser $clipStamps[$clipnum]
-            $clipsSps += $parserOut[0]
-            $clipsRt += $parserOut[1]
+            $clipsSps += $fixedStartStamps[$clipnum]
+            $clipsRt += $fixedRuntimeStamps[$clipnum]
             if ($videotype.toLower() -eq "youtube") {
                 if ($miniclipnum -eq 1) {
                     ffmpeg -y -ss $clipsSps[$clipnum] -i ($glink1) -t $clipsRt[$clipnum] -ss $clipsSps[$clipnum] -i ($glink2) -t $clipsRt[$clipnum] -crf 18 "$dlDir/$fulltitle.$fileOutExt"
@@ -251,7 +326,7 @@ $clipper = {
     Get-RSJob | Wait-RSJob | Receive-RSJob
     $clipnum = 0
     $clipnumout = 1
-    $validator1 = $timestampsIn.split(",").length
+    $validator1 = $fixedStartStamps.length
     while ($validator1 -gt 0) {
         if ($videotype.toLower() -eq "youtube") {
             if ($miniclipnum -eq 1) {
@@ -309,7 +384,7 @@ $clipper = {
     if ($valid -eq 1) {
         $clipnum = 0
         $clipnumout = 1
-        $validator2 = $timestampsIn.split(",").length
+        $validator2 = $fixedStartStamps.length
         while ($validator2 -gt 0) {
             if ($videotype.toLower() -eq "youtube") {
                 if ($miniclipnum -eq 1) {
@@ -344,34 +419,39 @@ $clipper = {
     }
 
     if ($miniclipnum -ge 2) {
-        $stitchCmdMapInputs = $stitchCmdMapInputs + "concat=n=$stitchCmdMapInputsCount`:v=1:a=1[outv][outa]"
-        $clipresolution = ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$tempdir/clip1.mkv"
-        $clipbitrate = ffprobe -v error -select_streams a:0 -show_entries stream=sample_rate -of csv=s=x:p=0 "$tempdir/clip1.mkv"
-        $clipframerate = ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of csv=s=x:p=0 "$tempdir/clip1.mkv"
-        $clipframerate = Invoke-Expression $clipframerate
-        $stitchCmd = "ffmpeg -y $stitchCmdInputs -crf 18 -filter_complex `"$stitchCmdMapInputs`" -map `"[outv]`" -map `"[outa]`" -x264-params keyint=$clipframerate`:scenecut=0 `"$dlDir/output.$fileOutExt`""
-        ffmpeg -y -f lavfi -i color=black:s="$clipresolution":r=$clipframerate -f lavfi -i anullsrc -ar $clipbitrate -ac 2 -t 3 "$tempdir/blackscreen.mkv"
-        Invoke-Expression $stitchCmd
-        if ($rescaleVideo.ToLower() -eq "true") {
-            ffmpeg -i "$dlDir/output.$fileOutExt" -vf scale=1920x1080:flags=bicubic -x264-params keyint=$clipframerate`:scenecut=0 "$dlDir/outputSCALED.$fileOutExt"
-            Remove-Item -Path "$dlDir/output.$fileOutExt"
-            Rename-Item -Path "$dlDir/outputSCALED.$fileOutExt" -NewName "$fulltitle.$fileOutExt"
+        if ($doNotStitch.toLower() -eq "true") {
+            write-output "Clipping Complete"
         } else {
-            Rename-Item -Path "$dlDir/output.$fileOutExt" -NewName "$fulltitle.$fileOutExt"
-        }
-        if ((Test-Path("$dlDir/$fulltitle.$fileOutExt")) -eq $true) {
-            Write-output "Clipping Complete"
-        }
-        else {
-            Write-output "Clipping Unsuccessful"
-        }
-        $parsernum = $miniclipnum
-        $clipnumout = 1
-        remove-item "$tempdir/blackscreen.mkv"  
-        while ($parserNum -gt 0) {
-            remove-Item -path "$tempdir/clip$clipnumout.mkv"
-            $clipnumout ++
-            $parserNum --
+            $stitchCmdMapInputs = $stitchCmdMapInputs + "concat=n=$stitchCmdMapInputsCount`:v=1:a=1[outv][outa]"
+            $clipresolution = ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$tempdir/clip1.mkv"
+            $clipbitrate = ffprobe -v error -select_streams a:0 -show_entries stream=sample_rate -of csv=s=x:p=0 "$tempdir/clip1.mkv"
+            $clipframerate = ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of csv=s=x:p=0 "$tempdir/clip1.mkv"
+            $clipframerate = Invoke-Expression $clipframerate
+            $stitchCmd = "ffmpeg -y $stitchCmdInputs -crf 18 -filter_complex `"$stitchCmdMapInputs`" -map `"[outv]`" -map `"[outa]`" -x264-params keyint=$clipframerate`:scenecut=0 `"$dlDir/output.$fileOutExt`""
+            ffmpeg -y -f lavfi -i color=black:s="$clipresolution":r=$clipframerate -f lavfi -i anullsrc -ar $clipbitrate -ac 2 -t 3 "$tempdir/blackscreen.mkv"
+            Invoke-Expression $stitchCmd
+            if ($rescaleVideo.ToLower() -eq "true") {
+                ffmpeg -i "$dlDir/output.$fileOutExt" -vf scale=1920x1080:flags=bicubic -x264-params keyint=$clipframerate`:scenecut=0 "$dlDir/outputSCALED.$fileOutExt"
+                Remove-Item -Path "$dlDir/output.$fileOutExt"
+                Rename-Item -Path "$dlDir/outputSCALED.$fileOutExt" -NewName "$fulltitle.$fileOutExt"
+            } else {
+                Rename-Item -Path "$dlDir/output.$fileOutExt" -NewName "$fulltitle.$fileOutExt"
+            }
+            if ((Test-Path("$dlDir/$fulltitle.$fileOutExt")) -eq $true) {
+                Write-output "Clipping Complete"
+            }
+            else {
+                Write-output "Clipping Unsuccessful"
+            }
+            $parsernum = $miniclipnum
+            $clipnumout = 1
+            remove-item "$tempdir/blackscreen.mkv"
+            Get-RSJob | Remove-RSJob
+            while ($parserNum -gt 0) {
+                remove-Item -path "$tempdir/clip$clipnumout.mkv"
+                $clipnumout ++
+                $parserNum --
+            }   
         }
     }
     else {return}
