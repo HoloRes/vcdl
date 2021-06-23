@@ -1,4 +1,4 @@
-## Revision 9 Changelog
+# Revision 9 Changelog
 - Completely rewrote timestamp parser
 - Modified parameter names
 
@@ -13,14 +13,14 @@
 - Removed clip stitching with black screen seperator
 - Added customizable miniclip time buffer (The time added to the start and end of each miniclip)
 
-## General Usage Guide
+# General Usage Guide
 
 There are only 3 arguments you are required to pass:
 * `-siteType`: (youtube/other) - This specifies to the script how to get the file links for what you are downloading. You only need to specify youtube separately due to a difference in how youtube returns direct file links. All other sites or file links should use "other"
 * `-videoLink`: The link to the youtube video, direct file link, or whatever you need to clip.
 * `-timestamps`: MUST BE IN QUOTES, and specifies the timestamps to clip. Each timestamp pair must be formatted like [xx:xx:xx-xx:xx:xx], and you can have multiple pairs that are seperated with commas, no spaces, and the script will stitch those timestamp pairs together. Overlap that would be caused by adding the time buffer is automatically calculated, so no need to worry about that.
 
-## Full List of Parameters
+# Full List of Parameters
 
 | Parameter | Type | Description | Tested |
 |:----------|:-----|:------------|-------:|
