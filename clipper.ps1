@@ -3,18 +3,18 @@
 
 # Written and Tested by Sheer Curiosity
 param (
-    [string]$outputTitle = "output", # Defines the output filename, without extension    Options: Any Title You Want
-    [string]$siteType = $null, # Defines the type of video being clipped                 Options: Youtube, Other
-    [string]$videoLink = $null, # Defines input link                                     Options: YouTube Links and Direct Video File Links
-    [string]$dlDir = ".", # Defines the download directory for the final file            Options: Any Directory On Your PC
-    [string]$timestamps = $null, # Defines the timestamps to be clipped                  Options: Timestamps In This Format (Add Comma & No Space For Multiple Subclips): [xx:xx:xx-xx:xx:xx],[xx:xx:xx-xx:xx:xx]
-    [string]$outputFileExt = "mkv", # Defines the output file extension                  Options: Any Video Extensions Supported By FFMPEG
-		[string]$miniclipFileExt = "mkv",
-		[string]$useAltCodecs = "false",
-		[string]$rescaleVideo = "false",
-		[string]$doNotStitch = "false",
-		[int]$paddingInt = 5,
-    [int]$parallelChunkSize = 5
+	[string]$outputTitle = "output", # Defines the output filename, without extension    Options: Any Title You Want
+	[string]$siteType = $null, # Defines the type of video being clipped                 Options: Youtube, Other
+	[string]$videoLink = $null, # Defines input link                                     Options: YouTube Links and Direct Video File Links
+	[string]$dlDir = ".", # Defines the download directory for the final file            Options: Any Directory On Your PC
+	[string]$timestamps = $null, # Defines the timestamps to be clipped                  Options: Timestamps In This Format (Add Comma & No Space For Multiple Subclips): [xx:xx:xx-xx:xx:xx],[xx:xx:xx-xx:xx:xx]
+	[string]$outputFileExt = "mkv", # Defines the output file extension                  Options: Any Video Extensions Supported By FFMPEG
+	[string]$miniclipFileExt = "mkv",
+	[string]$useAltCodecs = "false",
+	[string]$rescaleVideo = "false",
+	[string]$doNotStitch = "false",
+	[int]$paddingInt = 5,
+	[int]$parallelChunkSize = 5
 )
 
 $ffmpegExts = @(
