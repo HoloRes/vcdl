@@ -1,488 +1,391 @@
+# HoloClipper Revision 9 Version 1
+# Keyframes are the enemy, and should be eradicated.
+
 # Written and Tested by Sheer Curiosity
-
-# HoloClipper Revision 7 Version 1
-
-# REQUIRED BINARIES (BOTH MUST BE ADDED TO PATH)
-# -ffmpeg
-# -ffprobe
-# -youtube-dl
-
-# Define parameters
 param (
-    [string]$fulltitle = "output", # Defines the output filename, without extension        Options: Any Title You Want
-    [string]$videotype = $null, # Defines the type of video being clipped               Options: Youtube, Other
-    [string]$inlink = $null, # Defines input link                                    Options: YouTube Links and Direct Video File Links
-    [string]$dlDir = ".", # Defines the download directory for the final file     Options: Any Directory On Your PC
-    [string]$timestampsIn = $null, # Defines the timestamps to be clipped                  Options: Timestamps In This Format (Add Comma, No Space For Multiple Subclips): [xx:xx:xx-xx:xx:xx],[xx:xx:xx-xx:xx:xx]
-    [string]$miniclipFileExt = "mkv",
-    [string]$fileOutExt = "mkv", # Defines the output file extension                     Options: Any Video Extensions Supported By FFMPEG
-    [string]$rescaleVideo = "false", # True/False rescale video to 1080p                     Options: True, False
-    [string]$doNotStitch = "false",
-    [string]$isIkari = "true",
+    [string]$outputTitle = "output", # Defines the output filename, without extension    Options: Any Title You Want
+    [string]$siteType = $null, # Defines the type of video being clipped                 Options: Youtube, Other
+    [string]$videoLink = $null, # Defines input link                                     Options: YouTube Links and Direct Video File Links
+    [string]$dlDir = ".", # Defines the download directory for the final file            Options: Any Directory On Your PC
+    [string]$timestamps = $null, # Defines the timestamps to be clipped                  Options: Timestamps In This Format (Add Comma & No Space For Multiple Subclips): [xx:xx:xx-xx:xx:xx],[xx:xx:xx-xx:xx:xx]
+    [string]$outputFileExt = "mkv", # Defines the output file extension                  Options: Any Video Extensions Supported By FFMPEG
+		[string]$miniclipFileExt = "mkv",
+		[string]$useAltCodecs = "false",
+		[string]$rescaleVideo = "false",
+		[string]$doNotStitch = "false",
+		[int]$paddingInt = 5,
     [int]$parallelChunkSize = 5
 )
 
-# Define directory for temporary files
-$tempdir = "./temp"
+$ffmpegExts = @(
+	"3g2", "3gp", "a64", "ac3", "aac", "adts", "adx", "aif", "aiff", "afc", "aifc", "al", "tun", "pcm", "amr",
+	"amv", "apm", "apng", "aptx", "aptxhd", "asf", "wmv", "wma", "asf", "wmv", "wma", "ass", "ssa", "ast", "au",
+	"avi", "avs", "avs2", "bit", "caf", "cavs", "c2", "mpd", "302", "drc", "vc2", "dnxhd", "dnxhr", "dts", "dv",
+	"dvd", "eac3", "f4v", "ffmeta", "cpk", "flm", "fits", "flac", "flv", "g722", "tco", "rco", "gif", "gsm", "gxf",
+	"h261", "h263", "h264", "264", "hevc", "h265", "265", "m3u8", "ico", "lbc", "bmp", "dpx", "jls", "jpeg", "jpg",
+	"ljpg", "pam", "pbm", "pcx", "pgm", "pgmyuv", "png", "ppm", "sgi", "tga", "tif", "tiff", "jp2", "j2c", "j2k",
+	"xwd", "sun", "ras", "rs", "im1", "im8", "im24", "sunras", "xbm", "xface", "pix", "y", "m4v", "m4a", "m4b",
+	"sf", "ircam", "ismv", "isma", "ivf", "jss", "js", "vag", "latm", "loas", "lrc", "m4v", "mkv", "sub", "mjpg",
+	"mjpeg", "mlp", "mmf", "mov", "mp2", "m2a", "mpa", "mp3", "mp4", "mpg", "mpeg", "mpg", "mpeg", "m1v", "m2v",
+	"ts", "m2t", "m2ts", "mts", "mjpg", "ul", "mxf", "mxf", "nut", "oga", "ogg", "ogv", "oma", "opus", "mp4",
+	"psp", "yuv", "rgb", "rm", "ra", "roq", "rso", "sw", "sb", "sbc", "msbc", "scc", "sox", "spdif", "spx",
+	"srt", "sup", "vob", "swf", "thd", "tta", "uw", "ub", "vc1", "rcv", "vob", "voc", "w64", "wav", "webm",
+	"chk", "xml", "webp", "vtt", "wtv", "wv", "y4m"
+)
+
+# Input Checks
+if (!$siteType -or !$videoLink -or !$timestamps) {
+	Throw "ERROR: Missing Parameters"
+}
+if ($useAltCodecs.toLower() -ne "false" -and $useAltCodecs.toLower() -ne "true") {
+	Throw "ERROR: Invalid input for parameter -useAltCodecs"
+}
+if ($rescaleVideo.toLower() -ne "false" -and $rescaleVideo.toLower() -ne "true") {
+	Throw "ERROR: Invalid input for parameter -rescaleVideo"
+}
+if ($doNotStitch.toLower() -ne "false" -and $doNotStitch.toLower() -ne "true") {
+	Throw "ERROR: Invalid input for parameter -doNotStitch"
+}
+if ($siteType.ToLower() -ne "youtube" -and $siteType.ToLower() -ne "other") {
+	Throw "ERROR: Invalid site type"
+}
+if ($ffmpegExts -cnotcontains $outputFileExt.toLower()) {
+	Throw "ERROR: Invalid output file extension"
+}
+if ($ffmpegExts -cnotcontains $miniclipFileExt.toLower()) {
+	Throw "ERROR: Invalid output file extension"
+}
+if ($useAltCodecs.toLower() -eq "true" -and $siteType.toLower() -eq "other") {
+	Write-Warning "Alternate codecs not supported on other video sites, ignoring -useAltCodecs parameter."
+}
+if ($doNotStitch.toLower() -ne "true" -and $miniclipFileExt -ne "mkv") {
+	Write-Warning "-doNotStitch is unspecified or false, ignoring -miniclipFileExt."
+}
+if ($outputFileExt -ne "mkv" -and $siteType.toLower() -eq "other") {
+	Write-Warning "Using an output file extension other than mkv with other video sites will result in extra re-encoding. Please set the output file extension to mkv to avoid this in the future."
+}
+if ($outputFileExt -ne "mkv" -and $useAltCodecs.toLower() -eq "true") {
+	Write-Warning "Using an output file extension other than mkv with the -useAltCodecs parameter set to true will result in extra re-encoding. Please set the output file extension to mkv to avoid this in the future."
+}
+if ($miniclipFileExt -ne "mkv" -and $siteType.toLower() -eq "other") {
+	Write-Warning "Using a miniclip file extension other than mkv with other video sites will result in extra re-encoding. Please set the miniclip file extension to mkv to avoid this in the future."
+}
+if ($paddingInt -gt 30) {
+	$paddingInt = 30
+}
+if ($paddingInt -lt 0) {
+	$paddingInt = 0
+}
+if ($parallelChunkSize -lt 0) {
+	$parallelChunkSize = 0
+}
+
+# Install PoshRSJob for Parallel Processing
 Install-module -Name PoshRSJob -Scope CurrentUser
 Get-RSJob | Remove-RSJob
 
-if (!$videotype -or !$inlink -or !$timestampsIn) {
-    Throw "ERROR: Missing Parameters"
+# Global Variables
+$tempdir = $env:TEMP
+$finalStartTimestamps = [System.Collections.ArrayList]@()
+$finalRuntimeTimestamps = [System.Collections.ArrayList]@()
+
+# Timestamp Parser
+# *NOTE*
+# What blub said about the previous version of this parsing function made me
+# really self-conscious, so I rewrote it to be less dumb, faster, and more 
+# memory efficient!
+function getTimestamps() {
+	function parserCheck($clipstamps) {
+		$clipTimestamps = $clipstamps.Trim("[]").Split("-")
+		$ts1Array = [System.Collections.ArrayList]@()
+		$ts2Array = [System.Collections.ArrayList]@()
+		[void]$ts1Array.AddRange($clipTimestamps[0].Split(":"))
+		[void]$ts2Array.AddRange($clipTimestamps[1].Split(":"))
+		for ($i = 0; $i -lt $ts1Array.Count; $i++) {
+			$ts1Array[$i] = [int]$ts1Array[$i]
+		}
+		for ($i = 0; $i -lt $ts2Array.Count; $i++) {
+			$ts2Array[$i] = [int]$ts2Array[$i]
+		}
+		if ($ts1Array.Count -eq 2) {
+			$ts1Array.Insert(0, 0)
+			while ($ts1Array[1] -ge 60) {
+				$ts1Array[1] -= 60
+				$ts1Array[0] += 1
+			}
+		}
+		if ($ts2Array.Count -eq 2) {
+			$ts2Array.Insert(0, 0)
+			while ($ts2Array[1] -ge 60) {
+				$ts2Array[1] -= 60
+				$ts2Array[0] += 1
+			}
+		}
+		if ($ts1Array[2] -lt $paddingInt -and $ts1Array[1] -eq 0 -and $ts1Array[0] -eq 0) {
+			$ts1Array[2] = 0
+		} else {
+			$ts1Array[2] -= $paddingInt
+		}
+		$ts2Array[2] += $paddingInt
+		if ($ts1Array[2] -lt 0) {
+			$ts1Array[2] += 60
+			$ts1Array[1] -= 1
+		}
+		if ($ts1Array[1] -lt 0) {
+			$ts1Array[1] += 60
+			$ts1Array[0] -= 1
+		}
+		if ($ts2Array[2] -ge 60) {
+			$ts2Array[2] -= 60
+			$ts2Array[1] += 1
+		}
+		if ($ts2Array[1] -ge 60) {
+			$ts2Array[1] -= 60
+			$ts2Array[0] += 1
+		}
+		for ($i = 0; $i -lt $ts1Array.Count; $i++) {
+			if(($ts1Array[$i].ToString().Length) -eq 1) {
+				$ts1Array[$i] = "0$($ts1Array[$i])"
+			}
+			if(($ts2Array[$i].ToString().Length) -eq 1) {
+				$ts2Array[$i] = "0$($ts2Array[$i])"
+			}
+		}
+		return (
+			"$($ts1Array[0])`:$($ts1Array[1])`:$($ts1Array[2])`:00", 
+			"$($ts2Array[0])`:$($ts2Array[1])`:$($ts2Array[2])`:00"
+			)
+	}
+	$clipStamps = $timestamps.Split(",")
+	$parserOut = [System.Collections.ArrayList]@()
+	for ($i = 0; $i -lt $clipStamps.length; $i++) {
+		$res = parserCheck $clipStamps[$i]
+		[void]$parserOut.AddRange($res)
+	}
+	for ($i = 0; $i -lt $parserOut.Count; $i++) {
+		if ($i -lt $parserOut.Count - 1 -and $i % 2 -ne 0) {
+			$startStamp = [System.Collections.ArrayList]@()
+			$endStamp = [System.Collections.ArrayList]@()
+			$startStamp.AddRange($parserOut[$i+1].Split(":"))
+			$endStamp.AddRange($parserOut[$i].Split(":"))
+			for ($j = 0; $j -lt $startStamp.Count; $j++) {
+				$startStamp[$j] = [int]$startStamp[$j]
+				$endStamp[$j] = [int]$endStamp[$j]
+			}
+			if ($startStamp[0] -le $endStamp[0]) {
+				if ($startStamp[1] -le $endStamp[1]) {
+					if ($startStamp[2] -le $endStamp[2]) {
+						if ($startStamp[3] -le $endStamp[3]) {
+							$parserOut[$i] = "INVALID"
+							$parserOut[$i+1] = "INVALID"
+						}
+					}
+				}
+			}
+		}
+	}
+	while ($parserOut.Contains("INVALID")) {
+		$parserOut.Remove("INVALID")
+	}
+	for ($i = 0; $i -lt $parserOut.Count; $i++) {
+		if ($i % 2 -eq 0) {
+			$runtimeArray = [System.Collections.ArrayList]@()
+			$startStamp = $parserOut[$i].Split(":")
+			$endStamp = $parserOut[$i+1].Split(":")
+			for ($j = 0; $j -lt $startStamp.Length; $j++) {
+				$startStamp[$j] = [int]$startStamp[$j]
+				$endStamp[$j] = [int]$endStamp[$j]
+			}
+			[void]$runtimeArray.Add($endStamp[0] - $startStamp[0])
+			[void]$runtimeArray.Add($endStamp[1] - $startStamp[1])
+			[void]$runtimeArray.Add($endStamp[2] - $startStamp[2])
+			[void]$runtimeArray.Add($endStamp[3] - $startStamp[3])
+			if ($runtimeArray[2] -lt 0) {
+				$runtimeArray[2] += 60
+				$runtimeArray[1] -= 1
+			}
+			if ($runtimeArray[1] -lt 0) {
+				$runtimeArray[1] += 60
+				$runtimeArray[0] -= 1
+			}
+			for ($j = 0; $j -lt $runtimeArray.Count; $j++) {
+				if(($runtimeArray[$j].ToString().Length) -eq 1) {
+					$runtimeArray[$j] = "0$($runtimeArray[$j])"
+				}
+				if(($startStamp[$j].ToString().Length) -eq 1) {
+					$startStamp[$j] = "0$($startStamp[$j])"
+				}
+			}
+			[void]$finalStartTimestamps.Add("$($startStamp[0])`:$($startStamp[1])`:$($startStamp[2])`.$($startStamp[3])")
+			[void]$finalRuntimeTimestamps.Add("$($runtimeArray[0])`:$($runtimeArray[1])`:$($runtimeArray[2])`.$($runtimeArray[3])")
+		}
+	}
+	return $finalStartTimestamps, $finalRuntimeTimestamps
 }
 
-if ($isIkari.toLower() = "true") {
-    if (!(Test-Path -Path $tempdir)) {
-        mkdir $tempdir
-    }
+# Also rewrote this bit, the old version was giving me an aneurysm.
+$finalStartTimestamps, $finalRuntimeTimestamps = getTimestamps
+if ($siteType.toLower() -eq "youtube") {
+	$ytdlAttempts = 0
+	while (!$avFileLinks -and $ytdlAttempts -lt 5) {
+		if ($useAltCodecs.toLower() -eq "true") {
+			$avFileLinks = youtube-dl -f "bestvideo+bestaudio[acodec^=mp4a]/best" -g --youtube-skip-dash-manifest "$videoLink"
+		} else {
+			$avFileLinks = youtube-dl -f "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/best[vcodec^=avc1]" -g --youtube-skip-dash-manifest "$videoLink"
+		}
+		$ytdlAttempts++
+	}
+	if ($ytdlAttempts -eq 5) {
+		Write-output "Error Fetching Direct File Links. Verify Inputted Media Link"
+		Throw "ERROR: YTDL failed to fetch media links"
+	}
+	$vLink, $aLink = $avFileLinks.split(" ")
 }
-
-# Define "parser" function, which parses the input timestamps into a format
-# the script can work with
-function parserCheck($clipstamps) {
-    $clipTimestamps = $clipstamps.trim("[]")
-    $clip1st1, $clip1st2 = $clipTimestamps.split("-")
-    $c1st1array = $clip1st1.split(":")
-    $c1st2array = $clip1st2.split(":")
-    $c1a1, $c1a2, $c1a3 = $clip1st1.split(":")
-    $c1b1, $c1b2, $c1b3 = $clip1st2.split(":")
-    $c1a0 = 0
-    $c1a1 = [int]$c1a1
-    $c1a2 = [int]$c1a2
-    $c1a3 = [int]$c1a3
-    $c1b0 = 0
-    $c1b1 = [int]$c1b1
-    $c1b2 = [int]$c1b2
-    $c1b3 = [int]$c1b3
-    if ($c1st1array.length -eq 2) {
-        while ($c1a1 -ge 60) {
-            $c1a1 = $c1a1 - 60
-            $c1a0 ++
-        }
-        if (($c1a1.tostring().length) -eq 1) {
-            $c1a1 = "0$c1a1"
-        }
-        if (($c1a2.tostring().length) -eq 1) {
-            $c1a2 = "0$c1a2"
-        }
-        $tsin = "$c1a0`:$c1a1`:$c1a2`:00"
-    }
-    if ($c1st1array.length -eq 3) {
-        if (($c1a1.tostring().length) -eq 1) {
-            $c1a1 = "0$c1a1"
-        }
-        if (($c1a2.tostring().length) -eq 1) {
-            $c1a2 = "0$c1a2"
-        }
-        if (($c1a3.tostring().length) -eq 1) {
-            $c1a3 = "0$c1a3"
-        }
-        $tsin = "$c1a1`:$c1a2`:$c1a3`:00"
-    }
-    if ($c1st2array.length -eq 2) {
-        while ($c1b1 -ge 60) {
-            $c1b1 = $c1b1 - 60
-            $c1b0 ++
-        }
-        if (($c1b1.tostring().length) -eq 1) {
-            $c1b1 = "0$c1b1"
-        }
-        if (($c1b2.tostring().length) -eq 1) {
-            $c1b2 = "0$c1b2"
-        }
-        $tein = "$c1b0`:$c1b1`:$c1b2`:00"
-    }
-    if ($c1st2array.length -eq 3) {
-        if (($c1b1.tostring().length) -eq 1) {
-            $c1b1 = "0$c1b1"
-        }
-        if (($c1b2.tostring().length) -eq 1) {
-            $c1b2 = "0$c1b2"
-        }
-        if (($c1b3.tostring().length) -eq 1) {
-            $c1b3 = "0$c1b3"
-        }
-        $tein = "$c1b1`:$c1b2`:$c1b3`:00"
-    }
-    $clipts = $tsin.split(":")
-    $clipts1 = [int]$clipts[0] #1ts1
-    $clipts2 = [int]$clipts[1] #1ts2
-    $clipts3 = [int]$clipts[2] #1ts3
-    $clipts4 = [int]$clipts[3] #1ts4
-    if ($clipts3 -lt 5 -and $clipts2 -eq 0 -and $clipts1 -eq 0) {
-        $clipts3 = 0
-    }
-    else {
-        $clipts3 = $clipts3 - 5
-        if ($clipts3 -lt 0) {
-            $clipts3 = $clipts3 + 60
-            $clipts2 = $clipts2 - 1
-        }
-        if ($clipts2 -lt 0) {
-            $clipts2 = $clipts2 + 60
-            $clipts1 = $clipts1 - 1
-        }
-    }
-    $clipte = $tein.split(":")
-    $clipte1 = [int]$clipte[0] #1te1
-    $clipte2 = [int]$clipte[1] #1te2
-    $clipte3 = [int]$clipte[2] #1te3
-    $clipte4 = [int]$clipte[3] #1te4
-    $clipte3 = $clipte3 + 5
-    if ($clipte3 -ge 60) {
-        $clipte3 = $clipte3 - 60
-        $clipte2 = $clipte2 + 1
-    }
-    if ($clipte2 -ge 60) {
-        $clipte2 = $clipte2 - 60
-        $clipte1 = $clipte1 + 1
-    }
-    if (($clipte1.tostring().length) -eq 1) {
-        $clipte1 = "0$clipte1"
-    }
-    if (($clipte2.tostring().length) -eq 1) {
-        $clipte2 = "0$clipte2"
-    }
-    if (($clipte3.tostring().length) -eq 1) {
-        $clipte3 = "0$clipte3"
-    }
-    if (($clipte4.tostring().length) -eq 1) {
-        $clipte4 = "0$clipte4"
-    }
-    if (($clipts1.tostring().length) -eq 1) {
-        $clipts1 = "0$clipts1"
-    }
-    if (($clipts2.tostring().length) -eq 1) {
-        $clipts2 = "0$clipts2"
-    }
-    if (($clipts3.tostring().length) -eq 1) {
-        $clipts3 = "0$clipts3"
-    }
-    if (($clipts4.tostring().length) -eq 1) {
-        $clipts4 = "0$clipts4"
-    }
-    $clipSps = "$clipts1`:$clipts2`:$clipts3`:$clipts4"
-    $clipEps = "$clipte1`:$clipte2`:$clipte3`:$clipte4"
-    return $clipSps, $clipEps
+if ($siteType.toLower() -eq "other") {
+	$ytdlAttempts = 0
+	while (!$avLink -and $ytdlAttempts -lt 5) {
+		$avLink = youtube-dl -f "best" -g "$videoLink" --add-header Accept:'*/*'
+		$ytdlAttempts++
+	}
+	if ($ytdlAttempts -eq 5) {
+		Write-output "Error Fetching Direct File Links. Verify Inputted Media Link"
+		Throw "ERROR: YTDL failed to fetch media links"
+	}
 }
-
-$clipStamps = $timestampsIn.split(",")
-for ($i = 0; $i -lt $clipStamps.length; $i++) {
-    $parserOut += parserCheck $clipStamps[$i]
-}
-$startStamps = @()
-$endStamps = @()
-$fixedStartStamps = @()
-$fixedRuntimeStamps = @()
-for ($i = 0; $i -lt $parserOut.length; $i++) {
-    if ($i % 2 -eq 0) {
-        $startStamps += $parserOut[$i]
+for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
+	if ($siteType.toLower() -eq "youtube") {
+  	if ($finalStartTimestamps.Count -eq 1) {
+			if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
+				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v copy "$dlDir/$outputTitle.vid.mkv"
+				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($aLink) -t $finalRuntimeTimestamps[$i] -c:a copy "$dlDir/$outputTitle.aud.m4a"
+				if ($outputFileExt -eq "mkv") {
+					ffmpeg -y -i "$dlDir/$outputTitle.vid.mkv" -i "$dlDir/$outputTitle.aud.m4a" -c copy "$dlDir/$outputTitle.mkv"
+				} elseif ($outputFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
+					ffmpeg -y -i "$dlDir/$outputTitle.vid.mkv" -i "$dlDir/$outputTitle.aud.m4a" -c copy "$dlDir/$outputTitle.mp4"
+				} else {
+					ffmpeg -y -i "$dlDir/$outputTitle.vid.mkv" -i "$dlDir/$outputTitle.aud.m4a" -crf 18 "$dlDir/$outputTitle.$outputFileExt"
+				}
+				remove-Item -path "$dlDir/$outputTitle.vid.mkv"
+				remove-Item -path "$dlDir/$outputTitle.aud.m4a"
+			} else {
+				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v libx264 "$dlDir/$outputTitle.vid.mkv"
+				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($aLink) -t $finalRuntimeTimestamps[$i] -c:a copy "$dlDir/$outputTitle.aud.m4a"
+				if ($outputFileExt -eq "mkv") {
+					ffmpeg -y -i "$dlDir/$outputTitle.vid.mkv" -i "$dlDir/$outputTitle.aud.m4a" -c copy "$dlDir/$outputTitle.mkv"
+				} elseif ($outputFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
+					ffmpeg -y -i "$dlDir/$outputTitle.vid.mkv" -i "$dlDir/$outputTitle.aud.m4a" -c copy "$dlDir/$outputTitle.mp4"
+				} else {
+					ffmpeg -y -i "$dlDir/$outputTitle.vid.mkv" -i "$dlDir/$outputTitle.aud.m4a" -crf 18 "$dlDir/$outputTitle.$outputFileExt"
+				}
+				remove-Item -path "$dlDir/$outputTitle.vid.mkv"
+				remove-Item -path "$dlDir/$outputTitle.aud.m4a"
+			}
     }
-    else {
-        $endStamps += $parserOut[$i]
+    if ($finalStartTimestamps.Count -ge 2) {
+      Start-RSJob -ScriptBlock {
+        $finalStartTimestamps = $args[0]
+        $finalRuntimeTimestamps = $args[1]
+        $i = $args[2]
+	      $vLink = $args[3]
+        $aLink = $args[4]
+        $tempdir = $args[5]
+				$miniclipFileExt = $args[6]
+				if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
+					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v copy "$tempdir/clip$($i+1).vid.mkv"
+					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($aLink) -t $finalRuntimeTimestamps[$i] -c:a copy "$tempdir/clip$($i+1).aud.m4a"
+					if ($miniclipFileExt -eq "mkv") {
+						ffmpeg -y -i "$tempdir/clip$($i+1).vid.mkv" -i "$tempdir/clip$($i+1).aud.m4a" -c copy "$tempdir/clip$($i+1).mkv"
+					} elseif ($miniclipFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
+						ffmpeg -y -i "$tempdir/clip$($i+1).vid.mkv" -i "$tempdir/clip$($i+1).aud.m4a" -c copy "$tempdir/clip$($i+1).mp4"
+					} else {
+						ffmpeg -y -i "$tempdir/clip$($i+1).vid.mkv" -i "$tempdir/clip$($i+1).aud.m4a" -crf 18 "$tempdir/clip$($i+1).$miniclipFileExt"
+					}
+					Remove-Item -Path "$tempdir/clip$($i+1).vid.mkv"
+					Remove-Item -Path "$tempdir/clip$($i+1).aud.m4a"
+				} else {
+					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v libx264 "$tempdir/clip$($i+1).vid.mkv"
+					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($aLink) -t $finalRuntimeTimestamps[$i] -c:a copy "$tempdir/clip$($i+1).aud.m4a"
+					if ($miniclipFileExt -eq "mkv") {
+						ffmpeg -y -i "$tempdir/clip$($i+1).vid.mkv" -i "$tempdir/clip$($i+1).aud.m4a" -c copy "$tempdir/clip$($i+1).mkv"
+					} elseif ($miniclipFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
+						ffmpeg -y -i "$tempdir/clip$($i+1).vid.mkv" -i "$tempdir/clip$($i+1).aud.m4a" -c copy "$tempdir/clip$($i+1).mp4"
+					} else {
+						ffmpeg -y -i "$tempdir/clip$($i+1).vid.mkv" -i "$tempdir/clip$($i+1).aud.m4a" -crf 18 "$tempdir/clip$($i+1).$miniclipFileExt"
+					}
+					Remove-Item -Path "$tempdir/clip$($i+1).vid.mkv"
+					Remove-Item -Path "$tempdir/clip$($i+1).aud.m4a"
+				}
+      } -ArgumentList $finalStartTimestamps, $finalRuntimeTimestamps, $i, $vLink, $aLink, $tempdir, $miniclipFileExt
+      $parallelChunkCount++
     }
-}
-$finalStamps = @()
-$finalStamps += $startStamps[0]
-for ($i = 0; $i -lt $endStamps.length; $i++) {
-    if ($i -lt $endStamps.length - 1) {
-        $clipte = $endStamps[$i].split(":")
-        $clipts = $startStamps[$i + 1].split(":")
-        if ($clipts[0] -le $clipte[0]) {
-            if ($clipts[1] -le $clipte[1]) {
-                if ($clipts[2] -le $clipte[2]) {
-                    # BELOW CONDITIONALS NOT USED IN GENERAL USAGE
-                    if ($clipts[3] -le $clipte[3]) {
-                    }
-                    else {
-                        $finalStamps += $endStamps[$i]
-                        $finalStamps += $startStamps[$i + 1]
-                    }
-                }
-                else {
-                    $finalStamps += $endStamps[$i]
-                    $finalStamps += $startStamps[$i + 1]
-                }
-            }
-            else {
-                $finalStamps += $endStamps[$i]
-                $finalStamps += $startStamps[$i + 1]
-            }
-        }
-        else {
-            $finalStamps += $endStamps[$i]
-            $finalStamps += $startStamps[$i + 1]
-        }
+  }
+  if ($siteType.toLower() -eq "other") {
+    if ($finalStartTimestamps.Count -eq 1) {
+			if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
+				if ($outputFileExt -eq "mkv") {
+					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($avLink) -t $finalRuntimeTimestamps[$i] -c copy "$dlDir/$outputTitle.$outputFileExt"
+				} else {
+					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($avLink) -t $finalRuntimeTimestamps[$i] -crf 18 "$dlDir/$outputTitle.$outputFileExt"
+				}
+			} else {
+				if ($outputFileExt -eq "mkv") {
+					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v libx264 -c:a copy "$dlDir/$outputTitle.$outputFileExt"
+				} else {
+					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -crf 18 "$dlDir/$outputTitle.$outputFileExt"
+				}
+			}
     }
-}
-$finalStamps += $endStamps[$endStamps.length - 1]
-for ($i = 0; $i -lt $finalStamps.length; $i++) {
-    if ($i % 2 -eq 0) {
-        $startElements = $finalStamps[$i].split(":")
-        $endElements = $finalStamps[$i + 1].split(":")
-        $clipts1 = [int]$startElements[0] #1ts1
-        $clipts2 = [int]$startElements[1] #1ts2
-        $clipts3 = [int]$startElements[2] #1ts3
-        $clipts4 = [int]$startElements[3] #1ts4
-        $clipte1 = [int]$endElements[0] #1te1
-        $clipte2 = [int]$endElements[1] #1te2
-        $clipte3 = [int]$endElements[2] #1te3
-        $clipte4 = [int]$endElements[3] #1te4
-        $cliptc1 = $clipte1 - $clipts1
-        $cliptc2 = $clipte2 - $clipts2
-        $cliptc3 = $clipte3 - $clipts3
-        $cliptc4 = $clipte4 - $clipts4
-        if ($cliptc3 -lt 0) {
-            $cliptc3 = $cliptc3 + 60
-            $cliptc2 = $cliptc2 - 1
-        }
-        if ($cliptc2 -lt 0) {
-            $cliptc2 = $cliptc2 + 60
-            $cliptc1 = $cliptc1 - 1
-        }
-        if (($cliptc1.tostring().length) -eq 1) {
-            $cliptc1 = "0$cliptc1"
-        }
-        if (($cliptc2.tostring().length) -eq 1) {
-            $cliptc2 = "0$cliptc2"
-        }
-        if (($cliptc3.tostring().length) -eq 1) {
-            $cliptc3 = "0$cliptc3"
-        }
-        if (($cliptc4.tostring().length) -eq 1) {
-            $cliptc4 = "0$cliptc4"
-        }
-        $fixedStartStamps += "$($startElements[0])`:$($startElements[1])`:$($startElements[2])`.$($startElements[3])"
-        $fixedRuntimeStamps += "$cliptc1`:$cliptc2`:$cliptc3`.$cliptc4"
+    if ($finalStartTimestamps.Count -ge 2) {
+      Start-RSJob -ScriptBlock {
+        $finalStartTimestamps = $args[0]
+        $finalRuntimeTimestamps = $args[1]
+        $i = $args[2]
+        $avLink = $args[3]
+        $tempdir = $args[4]
+				if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
+					if ($miniclipFileExt -eq "mkv") {
+						ffmpeg -y -ss $finalStartTimestamps[$i] -i ($avLink) -t $finalRuntimeTimestamps[$i] -c copy "$tempdir/clip$($i+1).mkv"
+					} else {
+						ffmpeg -y -ss $finalStartTimestamps[$i] -i ($avLink) -t $finalRuntimeTimestamps[$i] -crf 18 "$tempdir/clip$($i+1).$miniclipFileExt"
+					}
+				} else {
+					if ($miniclipFileExt -eq "mkv") {
+						ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v libx264 -c:a copy "$tempdir/clip$($i+1).mkv"
+					} else {
+						ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -crf 18 "$tempdir/clip$($i+1).$miniclipFileExt"
+					}
+				}
+      } -ArgumentList $finalStartTimestamps, $finalRuntimeTimestamps, $i, $avLink, $tempdir
+      $parallelChunkCount++
     }
-}
-$clipper = {
-    $miniclipnum = $fixedStartStamps.length
-    $parserNum = $fixedStartStamps.length
-    $clipsSps = @()
-    $clipsRt = @()
-    $clipnum = 0
-    $clipnumout = 1
-    $mapperNum = 0
-    $ytdlAttempts = 0
-    $valid = 1
-    if ($videotype.toLower() -eq "youtube") {
-        while (!$glinks -and $ytdlAttempts -lt 5) {
-            $glinks = youtube-dl -g "$inlink"
-            $glinksBACKUP = youtube-dl -g --youtube-skip-dash-manifest "$inlink"
-            $ytdlAttempts = $ytdlAttempts + 1
-        }
-        if ($ytdlAttempts -eq 5) {
-            Write-output "Error Fetching Direct File Links. Verify Inputted Media Link"
-            Throw "ERROR: YTDL failed to fetch media links"
-        }
-        $glink1, $glink2 = $glinks.split(" ")
-        $glinkBACK1, $glinkBACK2 = $glinksBACKUP.split(" ")
-        if (!$glink2) { $glink2 = $glink1 }
-        if (!$glinkBACK2) { $glinkBACK2 = $glinkBACK1 }
-    }
-    if ($videotype.toLower() -eq "other") {
-        $glink = youtube-dl -g "$inlink" --add-header Accept:'*/*'
-        while (!$glink -and $ytdlAttempts -lt 5) {
-            $glink = youtube-dl -g "$inlink" --add-header Accept:'*/*'
-            $ytdlAttempts = $ytdlAttempts + 1
-        }
-        if ($ytdlAttempts -eq 5) {
-            Write-output "Error Fetching Direct File Links. Verify Inputted Media Link"
-            Throw "ERROR: YTDL failed to fetch media links"
-        }
-    }
+  }
+  if ($parallelChunkCount -eq $parallelChunkSize) {
+    Get-RSJob -State Running | Wait-RSJob
     $parallelChunkCount = 0
-    while ($parserNum -gt 0) {
-        $clipsSps += $fixedStartStamps[$clipnum]
-        $clipsRt += $fixedRuntimeStamps[$clipnum]
-        if ($videotype.toLower() -eq "youtube") {
-            if ($miniclipnum -eq 1) {
-                ffmpeg -y -ss $clipsSps[$clipnum] -i ($glink1) -t $clipsRt[$clipnum] -ss $clipsSps[$clipnum] -i ($glink2) -t $clipsRt[$clipnum] -crf 18 "$dlDir/$fulltitle.$fileOutExt"
-             }
-            if ($miniclipnum -ge 2) {
-                Start-RSJob -ScriptBlock {
-                    $clipsSps = $args[0]
-                    $clipsRt = $args[1]
-                    $clipnum = $args[2]
-                    $glink1 = $args[3]
-                    $glink2 = $args[4]
-                    $tempdir = $args[5]
-                    $clipnumout = $args[6]
-                    $miniclipFileExt = $args[7]
-                    ffmpeg -y -ss $clipsSps[$clipnum] -i ($glink1) -t $clipsRt[$clipnum] -ss $clipsSps[$clipnum] -i ($glink2) -t $clipsRt[$clipnum] -crf 18 "$tempdir/clip$clipnumout.$miniclipFileExt"
-                } -ArgumentList $clipsSps, $clipsRt, $clipnum, $glink1, $glink2, $tempdir, $clipnumout, $miniclipFileExt
-                $parallelChunkCount++
-            }
-        }
-        if ($videotype.toLower() -eq "other") {
-            if ($miniclipnum -eq 1) {
-                ffmpeg -y -ss $clipsSps[$clipnum] -i ($glink) -t $clipsRt[$clipnum] -crf 18 "$dlDir/$fulltitle.$fileOutExt"
-                if ((Test-Path("$dlDir/$fulltitle.$fileOutExt")) -eq $true) {
-                    Write-output "Clipping Complete"
-                }
-                else {
-                    Write-output "Clipping Failed"
-                }
-            }
-            if ($miniclipnum -ge 2) {
-                Start-RSJob -ScriptBlock {
-                    $clipsSps = $args[0]
-                    $clipsRt = $args[1]
-                    $clipnum = $args[2]
-                    $glink = $args[3]
-                    $tempdir = $args[4]
-                    $clipnumout = $args[5]
-                    $miniclipFileExt = $args[6]
-                    ffmpeg -y -ss $clipsSps[$clipnum] -i ($glink) -t $clipsRt[$clipnum] -crf 18 "$tempdir/clip$clipnumout.$miniclipFileExt"
-                } -ArgumentList $clipsSps, $clipsRt, $clipnum, $glink, $tempdir, $clipnumout, $miniclipFileExt
-                $parallelChunkCount++
-            }
-        }
-    if ($parallelChunkCount -eq $parallelChunkSize) {
-        Get-RSJob | Wait-RSJob
-        $parallelChunkCount = 0
-    }
-    $clipnum ++
-    $clipnumout ++
-    $parserNum --
-    }
-    Get-RSJob | Wait-RSJob | Receive-RSJob
-    $clipnum = 0
-    $clipnumout = 1
-    $validator1 = $fixedStartStamps.length
-    while ($validator1 -gt 0) {
-        if ($videotype.toLower() -eq "youtube") {
-            if ($miniclipnum -eq 1) {
-                if ((Test-Path("$dlDir/$fulltitle.$fileOutExt")) -eq $true) {
-                    $valid = 0
-                    Write-output "Clipping Complete"
-                }
-                else {
-                    ffmpeg -y -ss $clipsSps[$clipnum] -i ($glinkBACK1) -t $clipsRt[$clipnum] -ss $clipsSps[$clipnum] -i ($glinkBACK2) -t $clipsRt[$clipnum] -crf 18 "$dlDir/$fulltitle.$fileOutExt"
-                }
-            }
-            if ($miniclipnum -ge 2) {
-                if ((Test-Path("$tempdir/clip$clipnumout.$miniclipFileExt")) -eq $true) {
-                    $valid = 0
-                    $stitchCmdInputs = $stitchCmdInputs + "-i `"$tempdir/clip$clipnumout.$miniclipFileExt`" "
-                    $stitchCmdMapInputs = $stitchCmdMapInputs + "[$mapperNum`:v:0][$mapperNum`:a:0]"
-                    $stitchCmdMapInputsCount ++
-                    if ($validator1 -gt 1) {
-                        $mapperNum ++
-                        $stitchCmdInputs = $stitchCmdInputs + "-i `"$tempdir/blackscreen.$miniclipFileExt`" "
-                        $stitchCmdMapInputs = $stitchCmdMapInputs + "[$mapperNum`:v:0][$mapperNum`:a:0]"
-                        $stitchCmdMapInputsCount ++
-                    }
-                }
-                else {
-                    Start-RSJob -ScriptBlock {
-                        $clipsSps = $args[0]
-                        $clipsRt = $args[1]
-                        $clipnum = $args[2]
-                        $glinkBACK1 = $args[3]
-                        $glinkBACK2 = $args[4]
-                        $tempdir = $args[5]
-                        $clipnumout = $args[6]
-                        $miniclipFileExt = $args[7]
-                        ffmpeg -y -ss $clipsSps[$clipnum] -i ($glinkBACK1) -t $clipsRt[$clipnum] -ss $clipsSps[$clipnum] -i ($glinkBACK2) -t $clipsRt[$clipnum] -crf 18 "$tempdir/clip$clipnumout.$miniclipFileExt"
-                    } -ArgumentList $clipsSps, $clipsRt, $clipnum, $glink1, $glink2, $tempdir, $clipnumout, $miniclipFileExt
-                }
-            }
-        }
-        if ($videotype.toLower() -eq "other") {
-            $valid = 0
-            $stitchCmdInputs = $stitchCmdInputs + "-i `"$tempdir/clip$clipnumout.$miniclipFileExt`" "
-            $stitchCmdMapInputs = $stitchCmdMapInputs + "[$mapperNum`:v:0][$mapperNum`:a:0]"
-            $stitchCmdMapInputsCount ++
-            if ($validator1 -gt 1) {
-                $mapperNum ++
-                $stitchCmdInputs = $stitchCmdInputs + "-i `"$tempdir/blackscreen.$miniclipFileExt`" "
-                $stitchCmdMapInputs = $stitchCmdMapInputs + "[$mapperNum`:v:0][$mapperNum`:a:0]"
-                $stitchCmdMapInputsCount ++
-            }
-        }
-        $mapperNum ++
-        $clipnum ++
-        $clipnumout ++
-        $validator1 --
-    }
-    if ($valid -eq 1) {
-        $clipnum = 0
-        $clipnumout = 1
-        $validator2 = $fixedStartStamps.length
-        while ($validator2 -gt 0) {
-            if ($videotype.toLower() -eq "youtube") {
-                if ($miniclipnum -eq 1) {
-                    if ((Test-Path("$dlDir/$fulltitle.$fileOutExt")) -eq $true) {
-                        Write-output "Clipping Complete"
-                    }
-                    else {
-                        Write-Output "Clipping Failed"
-                    }
-                }
-                if ($miniclipnum -ge 2) {
-                    if ((Test-Path("$tempdir/clip$clipnumout.$miniclipFileExt")) -eq $true) {
-                        $stitchCmdInputs = $stitchCmdInputs + "-i `"$tempdir/clip$clipnumout.$miniclipFileExt`" "
-                        $stitchCmdMapInputs = $stitchCmdMapInputs + "[$mapperNum`:v:0][$mapperNum`:a:0]"
-                        $stitchCmdMapInputsCount ++
-                        if ($validator2 -gt 1) {
-                            $mapperNum ++
-                            $stitchCmdInputs = $stitchCmdInputs + "-i `"$tempdir/blackscreen.$miniclipFileExt`" "
-                            $stitchCmdMapInputs = $stitchCmdMapInputs + "[$mapperNum`:v:0][$mapperNum`:a:0]"
-                            $stitchCmdMapInputsCount ++
-                        }
-                    }
-                    else {
-                        Write-Output "Clipping Failed"
-                    }
-                }
-            }
-            $mapperNum ++
-            $clipnum ++
-            $clipnumout ++
-            $validator2 --
-        }
-    }
-
-    if ($miniclipnum -ge 2) {
-        if ($doNotStitch.toLower() -eq "true") {
-            write-output "Clipping Complete"
-        }
-        else {
-            $stitchCmdMapInputs = $stitchCmdMapInputs + "concat=n=$stitchCmdMapInputsCount`:v=1:a=1[outv][outa]"
-            $clipresolution = ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$tempdir/clip1.$miniclipFileExt"
-            $clipbitrate = ffprobe -v error -select_streams a:0 -show_entries stream=sample_rate -of csv=s=x:p=0 "$tempdir/clip1.$miniclipFileExt"
-            $clipframerate = ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of csv=s=x:p=0 "$tempdir/clip1.$miniclipFileExt"
-            $clipframerate = Invoke-Expression $clipframerate
-            $stitchCmd = "ffmpeg -y $stitchCmdInputs -crf 18 -filter_complex `"$stitchCmdMapInputs`" -map `"[outv]`" -map `"[outa]`" -x264-params keyint=$clipframerate`:scenecut=0 `"$dlDir/output.$fileOutExt`""
-            ffmpeg -y -f lavfi -i color=black:s="$clipresolution":r=$clipframerate -f lavfi -i anullsrc -ar $clipbitrate -ac 2 -t 3 "$tempdir/blackscreen.$miniclipFileExt"
-            Invoke-Expression $stitchCmd
-            if ($rescaleVideo.ToLower() -eq "true") {
-                ffmpeg -i "$dlDir/output.$fileOutExt" -vf scale=1920x1080:flags=bicubic -x264-params keyint=$clipframerate`:scenecut=0 "$dlDir/outputSCALED.$fileOutExt"
-                Remove-Item -Path "$dlDir/output.$fileOutExt"
-                Rename-Item -Path "$dlDir/outputSCALED.$fileOutExt" -NewName "$fulltitle.$fileOutExt"
-            }
-            else {
-                Rename-Item -Path "$dlDir/output.$fileOutExt" -NewName "$fulltitle.$fileOutExt"
-            }
-            if ((Test-Path("$dlDir/$fulltitle.$fileOutExt")) -eq $true) {
-                Write-output "Clipping Complete"
-            }
-            else {
-                Write-output "Clipping Failed"
-            }
-            $parsernum = $miniclipnum
-            $clipnumout = 1
-            remove-item "$tempdir/blackscreen.$miniclipFileExt"
-            Get-RSJob | Remove-RSJob
-            while ($parserNum -gt 0) {
-                remove-Item -path "$tempdir/clip$clipnumout.$miniclipFileExt"
-                $clipnumout ++
-                $parserNum --
-            }   
-        }
-    }
-    else { return }
+  }
 }
-&$clipper
+Get-RSJob -State Running | Wait-RSJob
+if ($doNotStitch.toLower() -eq "true") {
+	for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
+		Move-Item -Path "$tempdir/clip$($i+1).$miniclipFileExt" -Destination "$dlDir/$outputTitle`_clip$($i+1).$miniclipFileExt"
+	}
+} else {
+	for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
+		$stitchCmdInputs = $stitchCmdInputs + "-i `"$tempdir/clip$($i+1).mkv`" "
+		$stitchCmdMapInputs = $stitchCmdMapInputs + "[$i`:v:0][$i`:a:0]"
+	}
+	$stitchCmdMapInputs = $stitchCmdMapInputs + "concat=n=$($finalStartTimestamps.Count)`:v=1:a=1[outv][outa]"
+	$stitchCmd = "ffmpeg -y $stitchCmdInputs-crf 18 -filter_complex `"$stitchCmdMapInputs`" -map `"[outv]`" -map `"[outa]`" `"$dlDir/output.$outputFileExt`""
+	Invoke-Expression $stitchCmd
+	if ($rescaleVideo.toLower() -eq "true") {
+		ffmpeg -i "$dlDir/output.$outputFileExt" -vf scale=1920x1080:flags=bicubic "$dlDir/outputSCALED.$outputFileExt"
+		Remove-Item -Path "$dlDir/output.$outputFileExt"
+    Rename-Item -Path "$dlDir/outputSCALED.$outputFileExt" -NewName "$outputTitle.$outputFileExt"
+	} elseif ($outputTitle -ne "output") {
+		Rename-Item -Path "$dlDir/output.$outputFileExt" -NewName "$outputTitle.$outputFileExt"
+	}
+	Get-RSJob | Remove-RSJob
+	for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
+		Remove-Item -Path "$tempdir/clip$($i+1).$miniclipFileExt"
+	}
+}
