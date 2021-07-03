@@ -15,6 +15,14 @@
 
 # General Usage Guide
 
+First, you must have these 3 programs downloaded and added to your PATH:
+- youtube-dl
+- ffmpeg
+- ffprobe
+
+Once those are downloaded and added to PATH, you can use this script like any other
+Command line utility.
+
 There are only 3 arguments you are required to pass:
 * `-siteType`: (youtube/other) - This specifies to the script how to get the file links for what you are downloading. You only need to specify youtube separately due to a difference in how youtube returns direct file links. All other sites or file links should use "other"
 * `-videoLink`: The link to the youtube video, direct file link, or whatever you need to clip.
