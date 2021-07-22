@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # PowerShell Clipper (HoloClipper)
 ## What is HoloClipper?
 HoloClipper is a PowerShell-based clipping script for downloading specific portions of videos from YouTube and other video sites. It runs natively on Windows, and on Linux / macOS with PowerShell installed. You can download PowerShell [here](https://github.com/PowerShell/PowerShell), from the official repository.
@@ -17,8 +16,6 @@ HoloClipper is a PowerShell-based clipping script for downloading specific porti
 
 **All required executables must be added to the system PATH.** You can find a good article detailing how to add programs to the system PATH on Windows 7, 8, and 10 [here](https://www.howtogeek.com/118594/how-to-edit-your-system-path-for-easy-command-line-access/).
 
-=======
->>>>>>> 798f1425cae6a7d12ab1d89689560e5d45008bd5
 # Revision 9 Changelog
 - Completely rewrote timestamp parser
 - Modified parameter names
