@@ -1,3 +1,24 @@
+<<<<<<< HEAD
+# PowerShell Clipper (HoloClipper)
+## What is HoloClipper?
+HoloClipper is a PowerShell-based clipping script for downloading specific portions of videos from YouTube and other video sites. It runs natively on Windows, and on Linux / macOS with PowerShell installed. You can download PowerShell [here](https://github.com/PowerShell/PowerShell), from the official repository.
+
+| Platform | Compatible Powershell Versions |
+|:---------|:-------------------------------|
+| Windows | Desktop 5.1, Core ^6.0, ^7.0 |
+| Linux | Core ^6.0, ^7.0 |
+| macOS | Core ^6.0, ^7.0 |
+
+## Requirements
+
+- ffmpeg
+- ffprobe
+- youtube-dl
+
+**All required executables must be added to the system PATH.** You can find a good article detailing how to add programs to the system PATH on Windows 7, 8, and 10 [here](https://www.howtogeek.com/118594/how-to-edit-your-system-path-for-easy-command-line-access/).
+
+=======
+>>>>>>> 798f1425cae6a7d12ab1d89689560e5d45008bd5
 # Revision 9 Changelog
 - Completely rewrote timestamp parser
 - Modified parameter names
@@ -14,6 +35,8 @@
 - Added customizable miniclip time buffer (The time added to the start and end of each miniclip)
 
 # General Usage Guide
+<<<<<<< HEAD
+=======
 
 First, you must have these 3 programs downloaded and added to your PATH:
 - youtube-dl
@@ -22,12 +45,22 @@ First, you must have these 3 programs downloaded and added to your PATH:
 
 Once those are downloaded and added to PATH, you can use this script like any other
 Command line utility.
+>>>>>>> 798f1425cae6a7d12ab1d89689560e5d45008bd5
 
 There are only 3 arguments you are required to pass:
 * `-siteType`: (youtube/other) - This specifies to the script how to get the file links for what you are downloading. You only need to specify youtube separately due to a difference in how youtube returns direct file links. All other sites or file links should use "other"
 * `-videoLink`: The link to the youtube video, direct file link, or whatever you need to clip.
 * `-timestamps`: MUST BE IN QUOTES, and specifies the timestamps to clip. Each timestamp pair must be formatted like [xx:xx:xx-xx:xx:xx], and you can have multiple pairs that are seperated with commas, no spaces, and the script will stitch those timestamp pairs together. Overlap that would be caused by adding the time buffer is automatically calculated, so no need to worry about that.
 
+<<<<<<< HEAD
+# Troubleshooting
+
+**Error:** I got an error saying "clipper.ps1 cannot be loaded because running scripts is disabled on this system."
+
+**Fix:** Read [How to allow scripts to run](https://docs.microsoft.com/en-us/previous-versions//bb613481(v=vs.85)?redirectedfrom=MSDN#how-to-allow-scripts-to-run). Since `clipper.ps1` is not signed, the easiest way to run the script is by setting your execution policy to `Unrestricted`. Beware, this will allow *all* unsigned scripts to run on your machine. The other option is to run the command `Set-ExecutionPolicy Unrestricted -Scope Process`. This will set the execution policy for the current PowerShell window to `Unrestricted`, then revert back to `Default` when the window is closed.
+
+=======
+>>>>>>> 798f1425cae6a7d12ab1d89689560e5d45008bd5
 # Full List of Parameters
 
 | Parameter | Type | Description | Tested |
