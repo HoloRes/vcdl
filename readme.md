@@ -32,32 +32,18 @@ HoloClipper is a PowerShell-based clipping script for downloading specific porti
 - Added customizable miniclip time buffer (The time added to the start and end of each miniclip)
 
 # General Usage Guide
-<<<<<<< HEAD
-=======
-
-First, you must have these 3 programs downloaded and added to your PATH:
-- youtube-dl
-- ffmpeg
-- ffprobe
-
-Once those are downloaded and added to PATH, you can use this script like any other
-Command line utility.
->>>>>>> 798f1425cae6a7d12ab1d89689560e5d45008bd5
 
 There are only 3 arguments you are required to pass:
 * `-siteType`: (youtube/other) - This specifies to the script how to get the file links for what you are downloading. You only need to specify youtube separately due to a difference in how youtube returns direct file links. All other sites or file links should use "other"
 * `-videoLink`: The link to the youtube video, direct file link, or whatever you need to clip.
 * `-timestamps`: MUST BE IN QUOTES, and specifies the timestamps to clip. Each timestamp pair must be formatted like [xx:xx:xx-xx:xx:xx], and you can have multiple pairs that are seperated with commas, no spaces, and the script will stitch those timestamp pairs together. Overlap that would be caused by adding the time buffer is automatically calculated, so no need to worry about that.
 
-<<<<<<< HEAD
 # Troubleshooting
 
 **Error:** I got an error saying "clipper.ps1 cannot be loaded because running scripts is disabled on this system."
 
 **Fix:** Read [How to allow scripts to run](https://docs.microsoft.com/en-us/previous-versions//bb613481(v=vs.85)?redirectedfrom=MSDN#how-to-allow-scripts-to-run). Since `clipper.ps1` is not signed, the easiest way to run the script is by setting your execution policy to `Unrestricted`. Beware, this will allow *all* unsigned scripts to run on your machine. The other option is to run the command `Set-ExecutionPolicy Unrestricted -Scope Process`. This will set the execution policy for the current PowerShell window to `Unrestricted`, then revert back to `Default` when the window is closed.
 
-=======
->>>>>>> 798f1425cae6a7d12ab1d89689560e5d45008bd5
 # Full List of Parameters
 
 | Parameter | Type | Description | Tested |
