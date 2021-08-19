@@ -1,5 +1,5 @@
 # HoloClipper Revision 9 Version 2
-# Keyframes are the enemy, and should be eradicated.
+# I forgor 💀
 
 # Written and Tested by Sheer Curiosity
 param (
@@ -8,8 +8,8 @@ param (
 	[string]$videoLink = $null, # Defines input link                                     Options: YouTube Links and Direct Video File Links
 	[string]$dlDir = ".", # Defines the download directory for the final file            Options: Any Directory On Your PC
 	[string]$timestamps = $null, # Defines the timestamps to be clipped                  Options: Timestamps In This Format (Add Comma & No Space For Multiple Subclips): [xx:xx:xx-xx:xx:xx],[xx:xx:xx-xx:xx:xx]
-	[string]$outputFileExt = "mkv", # Defines the output file extension                  Options: Any Video Extensions Supported By FFMPEG
-	[string]$miniclipFileExt = "mkv",
+	[string]$outputFileExt = "mp4", # Defines the output file extension                  Options: Any Video Extensions Supported By FFMPEG
+	[string]$miniclipFileExt = "mp4",
 	[string]$useAltCodecs = "false",
 	[string]$rescaleVideo = "false",
 	[string]$doNotStitch = "false",
@@ -63,15 +63,7 @@ if ($useAltCodecs.toLower() -eq "true" -and $siteType.toLower() -eq "other") {
 if ($doNotStitch.toLower() -ne "true" -and $miniclipFileExt -ne "mkv") {
 	Write-Warning "-doNotStitch is unspecified or false, ignoring -miniclipFileExt."
 }
-if ($outputFileExt -ne "mkv" -and $siteType.toLower() -eq "other") {
-	Write-Warning "Using an output file extension other than mkv with other video sites will result in extra re-encoding. Please set the output file extension to mkv to avoid this in the future."
-}
-if ($outputFileExt -ne "mkv" -and $useAltCodecs.toLower() -eq "true") {
-	Write-Warning "Using an output file extension other than mkv with the -useAltCodecs parameter set to true will result in extra re-encoding. Please set the output file extension to mkv to avoid this in the future."
-}
-if ($miniclipFileExt -ne "mkv" -and $siteType.toLower() -eq "other") {
-	Write-Warning "Using a miniclip file extension other than mkv with other video sites will result in extra re-encoding. Please set the miniclip file extension to mkv to avoid this in the future."
-}
+# Hmm, could have sworn there used to be some extra warnings here... oh well.
 if ($paddingInt -gt 30) {
 	$paddingInt = 30
 }
@@ -98,11 +90,6 @@ if ($isIkari.toLower() -eq "true") {
 $finalStartTimestamps = [System.Collections.ArrayList]@()
 $finalRuntimeTimestamps = [System.Collections.ArrayList]@()
 
-# Timestamp Parser
-# *NOTE*
-# What blub said about the previous version of this parsing function made me
-# really self-conscious, so I rewrote it to be less dumb, faster, and more 
-# memory efficient!
 function getTimestamps() {
 	function parserCheck($clipstamps) {
 		$clipTimestamps = $clipstamps.Trim("[]").Split("-")
@@ -232,7 +219,6 @@ function getTimestamps() {
 	return $finalStartTimestamps, $finalRuntimeTimestamps
 }
 
-# Also rewrote this bit, the old version was giving me an aneurysm.
 $finalStartTimestamps, $finalRuntimeTimestamps = getTimestamps
 if ($siteType.toLower() -eq "youtube") {
 	$ytdlAttempts = 0
@@ -242,7 +228,7 @@ if ($siteType.toLower() -eq "youtube") {
 			$ytdlAttempts++
 		} else {
 			if ($useAltCodecs.toLower() -eq "true") {
-				$avFileLinks = youtube-dl -f "bestvideo+bestaudio[acodec^=mp4a]/best" -g --youtube-skip-dash-manifest "$videoLink"
+				$avFileLinks = youtube-dl -f "bestvideo[vcodec^=av01]+bestaudio[acodec^=mp4a]/best[vcodec^=av01]" -g --youtube-skip-dash-manifest "$videoLink"
 			} else {
 				$avFileLinks = youtube-dl -f "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/best[vcodec^=avc1]" -g --youtube-skip-dash-manifest "$videoLink"
 			}
@@ -277,7 +263,7 @@ for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 				} elseif ($outputFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
 					ffmpeg -y -i "$dlDir\$outputTitle.vid.mkv" -i "$dlDir\$outputTitle.aud.m4a" -c copy "$dlDir\$outputTitle.mp4"
 				} else {
-					ffmpeg -y -i "$dlDir\$outputTitle.vid.mkv" -i "$dlDir\$outputTitle.aud.m4a" -crf 18 "$dlDir\$outputTitle.$outputFileExt"
+					ffmpeg -y -i "$dlDir\$outputTitle.vid.mkv" -i "$dlDir\$outputTitle.aud.m4a" -c:a copy -c:v avc1 -crf 18 "$dlDir\$outputTitle.$outputFileExt"
 				}
 				remove-Item -path "$dlDir\$outputTitle.vid.mkv"
 				remove-Item -path "$dlDir\$outputTitle.aud.m4a"
