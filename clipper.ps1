@@ -13,7 +13,7 @@ param (
 	[string]$useAltCodecs = "false",
 	[string]$rescaleVideo = "false",
 	[string]$doNotStitch = "false",
-	[string]$customFormat = $null, # For Hololive Resort's internal project manager Ikari. No documentation will be provided for this parameter, use only if you know what you're doing.
+	[string]$customFormat = "NONE", # For Hololive Resort's internal project manager Ikari. No documentation will be provided for this parameter, use only if you know what you're doing.
 	[string]$isIkari = "false", # For Hololive Resort's internal project manager Ikari. No documentation will be provided for this parameter, use only if you know what you're doing.
 	[int]$paddingInt = 5,
 	[int]$parallelChunkSize = 5
@@ -60,8 +60,9 @@ if ($ffmpegExts -cnotcontains $miniclipFileExt.toLower()) {
 if ($useAltCodecs.toLower() -eq "true" -and $siteType.toLower() -eq "other") {
 	Write-Warning "Alternate codecs not supported on other video sites, ignoring -useAltCodecs parameter."
 }
-if ($doNotStitch.toLower() -ne "true" -and $miniclipFileExt -ne "mkv") {
+if ($doNotStitch.toLower() -ne "true" -and $miniclipFileExt -ne "mp4") {
 	Write-Warning "-doNotStitch is unspecified or false, ignoring -miniclipFileExt."
+	$miniclipFileExt = "mp4"
 }
 # Hmm, could have sworn there used to be some extra warnings here... oh well.
 if ($paddingInt -gt 30) {
@@ -81,7 +82,7 @@ Get-Job | Stop-Job | Remove-Job
 
 # Global Variables
 $tempdir = $env:TEMP
-if ($isIkari.toLower() -eq "true") {
+if ($isIkari.toLower() -eq "true" -or $null -eq $tempdir) {
 	$tempdir = "./temp"
 	if (!(Test-Path -Path $tempdir)) {
 		mkdir $tempdir
@@ -223,7 +224,7 @@ $finalStartTimestamps, $finalRuntimeTimestamps = getTimestamps
 if ($siteType.toLower() -eq "youtube") {
 	$ytdlAttempts = 0
 	while (!$avFileLinks -and $ytdlAttempts -lt 5) {
-		if ($null -ne $customFormat) {
+		if ($customFormat -ne "NONE") {
 			$avFileLinks = youtube-dl -f $customFormat -g --youtube-skip-dash-manifest "$videoLink"
 			$ytdlAttempts++
 		} else {
@@ -256,84 +257,87 @@ for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 	if ($siteType.toLower() -eq "youtube") {
   	if ($finalStartTimestamps.Count -eq 1) {
 			if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
-				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v copy "$dlDir\$outputTitle.vid.mkv"
-				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($aLink) -t $finalRuntimeTimestamps[$i] -c:a copy "$dlDir\$outputTitle.aud.m4a"
+				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v copy "$dlDir/$outputTitle.vid.mkv"
+				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($aLink) -t $finalRuntimeTimestamps[$i] -c:a copy "$dlDir/$outputTitle.aud.m4a"
 				if ($outputFileExt -eq "mkv") {
-					ffmpeg -y -i "$dlDir\$outputTitle.vid.mkv" -i "$dlDir\$outputTitle.aud.m4a" -c copy "$dlDir\$outputTitle.mkv"
+					ffmpeg -y -i "$dlDir/$outputTitle.vid.mkv" -i "$dlDir/$outputTitle.aud.m4a" -c copy "$dlDir/$outputTitle.mkv"
 				} elseif ($outputFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
-					ffmpeg -y -i "$dlDir\$outputTitle.vid.mkv" -i "$dlDir\$outputTitle.aud.m4a" -c copy "$dlDir\$outputTitle.mp4"
+					ffmpeg -y -i "$dlDir/$outputTitle.vid.mkv" -i "$dlDir/$outputTitle.aud.m4a" -c copy "$dlDir/$outputTitle.mp4"
 				} else {
-					ffmpeg -y -i "$dlDir\$outputTitle.vid.mkv" -i "$dlDir\$outputTitle.aud.m4a" -c:a copy -c:v avc1 -crf 18 "$dlDir\$outputTitle.$outputFileExt"
+					ffmpeg -y -i "$dlDir/$outputTitle.vid.mkv" -i "$dlDir/$outputTitle.aud.m4a" -crf 18 "$dlDir/$outputTitle.$outputFileExt"
 				}
-				remove-Item -path "$dlDir\$outputTitle.vid.mkv"
-				remove-Item -path "$dlDir\$outputTitle.aud.m4a"
+				remove-Item -path "$dlDir/$outputTitle.vid.mkv"
+				remove-Item -path "$dlDir/$outputTitle.aud.m4a"
 			} else {
-				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v libx264 "$dlDir\$outputTitle.vid.mkv"
-				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($aLink) -t $finalRuntimeTimestamps[$i] -c:a copy "$dlDir\$outputTitle.aud.m4a"
+				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v libx264 "$dlDir/$outputTitle.vid.mkv"
+				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($aLink) -t $finalRuntimeTimestamps[$i] -c:a copy "$dlDir/$outputTitle.aud.m4a"
 				if ($outputFileExt -eq "mkv") {
-					ffmpeg -y -i "$dlDir\$outputTitle.vid.mkv" -i "$dlDir\$outputTitle.aud.m4a" -c copy "$dlDir\$outputTitle.mkv"
+					ffmpeg -y -i "$dlDir/$outputTitle.vid.mkv" -i "$dlDir/$outputTitle.aud.m4a" -c copy "$dlDir/$outputTitle.mkv"
 				} elseif ($outputFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
-					ffmpeg -y -i "$dlDir\$outputTitle.vid.mkv" -i "$dlDir\$outputTitle.aud.m4a" -c copy "$dlDir\$outputTitle.mp4"
+					ffmpeg -y -i "$dlDir/$outputTitle.vid.mkv" -i "$dlDir/$outputTitle.aud.m4a" -c copy "$dlDir/$outputTitle.mp4"
 				} else {
-					ffmpeg -y -i "$dlDir\$outputTitle.vid.mkv" -i "$dlDir\$outputTitle.aud.m4a" -crf 18 "$dlDir\$outputTitle.$outputFileExt"
+					ffmpeg -y -i "$dlDir/$outputTitle.vid.mkv" -i "$dlDir/$outputTitle.aud.m4a" -crf 18 "$dlDir/$outputTitle.$outputFileExt"
 				}
-				remove-Item -path "$dlDir\$outputTitle.vid.mkv"
-				remove-Item -path "$dlDir\$outputTitle.aud.m4a"
+				remove-Item -path "$dlDir/$outputTitle.vid.mkv"
+				remove-Item -path "$dlDir/$outputTitle.aud.m4a"
 			}
+			Write-Output "Clipping Complete!"
     }
     if ($finalStartTimestamps.Count -ge 2) {
       Start-Job -ScriptBlock {
         $finalStartTimestamps = $args[0]
         $finalRuntimeTimestamps = $args[1]
         $i = $args[2]
-	      $vLink = $args[3]
+	    $vLink = $args[3]
         $aLink = $args[4]
         $tempdir = $args[5]
-				$miniclipFileExt = $args[6]
+		$miniclipFileExt = $args[6]
+		$useAltCodecs = $args[7]
 				if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
-					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v copy "$tempdir\clip$($i+1).vid.mkv"
-					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($aLink) -t $finalRuntimeTimestamps[$i] -c:a copy "$tempdir\clip$($i+1).aud.m4a"
+					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v copy "$tempdir/clip$($i+1).vid.mkv"
+					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($aLink) -t $finalRuntimeTimestamps[$i] -c:a copy "$tempdir/clip$($i+1).aud.m4a"
 					if ($miniclipFileExt -eq "mkv") {
-						ffmpeg -y -i "$tempdir\clip$($i+1).vid.mkv" -i "$tempdir\clip$($i+1).aud.m4a" -c copy "$tempdir\clip$($i+1).mkv"
+						ffmpeg -y -i "$tempdir/clip$($i+1).vid.mkv" -i "$tempdir/clip$($i+1).aud.m4a" -c copy "$tempdir/clip$($i+1).mkv"
 					} elseif ($miniclipFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
-						ffmpeg -y -i "$tempdir\clip$($i+1).vid.mkv" -i "$tempdir\clip$($i+1).aud.m4a" -c copy "$tempdir\clip$($i+1).mp4"
+						ffmpeg -y -i "$tempdir/clip$($i+1).vid.mkv" -i "$tempdir/clip$($i+1).aud.m4a" -c copy "$tempdir/clip$($i+1).mp4"
 					} else {
-						ffmpeg -y -i "$tempdir\clip$($i+1).vid.mkv" -i "$tempdir\clip$($i+1).aud.m4a" -crf 18 "$tempdir\clip$($i+1).$miniclipFileExt"
+						ffmpeg -y -i "$tempdir/clip$($i+1).vid.mkv" -i "$tempdir/clip$($i+1).aud.m4a" -crf 18 "$tempdir/clip$($i+1).$miniclipFileExt"
 					}
-					Remove-Item -Path "$tempdir\clip$($i+1).vid.mkv"
-					Remove-Item -Path "$tempdir\clip$($i+1).aud.m4a"
+					Remove-Item -Path "$tempdir/clip$($i+1).vid.mkv"
+					Remove-Item -Path "$tempdir/clip$($i+1).aud.m4a"
 				} else {
-					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v libx264 "$tempdir\clip$($i+1).vid.mkv"
-					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($aLink) -t $finalRuntimeTimestamps[$i] -c:a copy "$tempdir\clip$($i+1).aud.m4a"
+					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v libx264 "$tempdir/clip$($i+1).vid.mkv"
+					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($aLink) -t $finalRuntimeTimestamps[$i] -c:a copy "$tempdir/clip$($i+1).aud.m4a"
 					if ($miniclipFileExt -eq "mkv") {
-						ffmpeg -y -i "$tempdir\clip$($i+1).vid.mkv" -i "$tempdir\clip$($i+1).aud.m4a" -c copy "$tempdir\clip$($i+1).mkv"
+						ffmpeg -y -i "$tempdir/clip$($i+1).vid.mkv" -i "$tempdir/clip$($i+1).aud.m4a" -c copy "$tempdir/clip$($i+1).mkv"
 					} elseif ($miniclipFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
-						ffmpeg -y -i "$tempdir\clip$($i+1).vid.mkv" -i "$tempdir\clip$($i+1).aud.m4a" -c copy "$tempdir\clip$($i+1).mp4"
+						ffmpeg -y -i "$tempdir/clip$($i+1).vid.mkv" -i "$tempdir/clip$($i+1).aud.m4a" -c copy "$tempdir/clip$($i+1).mp4"
 					} else {
-						ffmpeg -y -i "$tempdir\clip$($i+1).vid.mkv" -i "$tempdir\clip$($i+1).aud.m4a" -crf 18 "$tempdir\clip$($i+1).$miniclipFileExt"
+						ffmpeg -y -i "$tempdir/clip$($i+1).vid.mkv" -i "$tempdir/clip$($i+1).aud.m4a" -crf 18 "$tempdir/clip$($i+1).$miniclipFileExt"
 					}
-					Remove-Item -Path "$tempdir\clip$($i+1).vid.mkv"
-					Remove-Item -Path "$tempdir\clip$($i+1).aud.m4a"
+					Remove-Item -Path "$tempdir/clip$($i+1).vid.mkv"
+					Remove-Item -Path "$tempdir/clip$($i+1).aud.m4a"
 				}
-      } -ArgumentList $finalStartTimestamps, $finalRuntimeTimestamps, $i, $vLink, $aLink, $tempdir, $miniclipFileExt
+      } -ArgumentList $finalStartTimestamps, $finalRuntimeTimestamps, $i, $vLink, $aLink, $tempdir, $miniclipFileExt, $useAltCodecs
       $parallelChunkCount++
     }
   }
   if ($siteType.toLower() -eq "other") {
     if ($finalStartTimestamps.Count -eq 1) {
-			if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
-				if ($outputFileExt -eq "mkv") {
-					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($avLink) -t $finalRuntimeTimestamps[$i] -c copy "$dlDir\$outputTitle.$outputFileExt"
-				} else {
-					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($avLink) -t $finalRuntimeTimestamps[$i] -crf 18 "$dlDir\$outputTitle.$outputFileExt"
-				}
+		if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
+			if ($outputFileExt -eq "mkv") {
+				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($avLink) -t $finalRuntimeTimestamps[$i] -c copy "$dlDir/$outputTitle.$outputFileExt"
 			} else {
-				if ($outputFileExt -eq "mkv") {
-					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v libx264 -c:a copy "$dlDir\$outputTitle.$outputFileExt"
-				} else {
-					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -crf 18 "$dlDir\$outputTitle.$outputFileExt"
-				}
+				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($avLink) -t $finalRuntimeTimestamps[$i] -crf 18 "$dlDir/$outputTitle.$outputFileExt"
 			}
+		} else {
+			if ($outputFileExt -eq "mkv") {
+				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v libx264 -c:a copy "$dlDir/$outputTitle.$outputFileExt"
+			} else {
+				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -crf 18 "$dlDir/$outputTitle.$outputFileExt"
+			}
+		}
+		Write-Output "Clipping Complete!"
     }
     if ($finalStartTimestamps.Count -ge 2) {
       Start-Job -ScriptBlock {
@@ -344,15 +348,15 @@ for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
         $tempdir = $args[4]
 				if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
 					if ($miniclipFileExt -eq "mkv") {
-						ffmpeg -y -ss $finalStartTimestamps[$i] -i ($avLink) -t $finalRuntimeTimestamps[$i] -c copy "$tempdir\clip$($i+1).mkv"
+						ffmpeg -y -ss $finalStartTimestamps[$i] -i ($avLink) -t $finalRuntimeTimestamps[$i] -c copy "$tempdir/clip$($i+1).mkv"
 					} else {
-						ffmpeg -y -ss $finalStartTimestamps[$i] -i ($avLink) -t $finalRuntimeTimestamps[$i] -crf 18 "$tempdir\clip$($i+1).$miniclipFileExt"
+						ffmpeg -y -ss $finalStartTimestamps[$i] -i ($avLink) -t $finalRuntimeTimestamps[$i] -crf 18 "$tempdir/clip$($i+1).$miniclipFileExt"
 					}
 				} else {
 					if ($miniclipFileExt -eq "mkv") {
-						ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v libx264 -c:a copy "$tempdir\clip$($i+1).mkv"
+						ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v libx264 -c:a copy "$tempdir/clip$($i+1).mkv"
 					} else {
-						ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -crf 18 "$tempdir\clip$($i+1).$miniclipFileExt"
+						ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -crf 18 "$tempdir/clip$($i+1).$miniclipFileExt"
 					}
 				}
       } -ArgumentList $finalStartTimestamps, $finalRuntimeTimestamps, $i, $avLink, $tempdir
@@ -367,27 +371,31 @@ for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 Get-Job -State Running | Wait-Job
 if ($doNotStitch.toLower() -eq "true") {
 	for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
-		Move-Item -Path "$tempdir\clip$($i+1).$miniclipFileExt" -Destination "$dlDir\$outputTitle`_clip$($i+1).$miniclipFileExt"
+		Move-Item -Path "$tempdir/clip$($i+1).$miniclipFileExt" -Destination "$dlDir/$outputTitle`_clip$($i+1).$miniclipFileExt"
 	}
-} else {
+	Write-Output "Clipping Complete!"
+}
+if ($finalStartTimestamps.Count -ge 2) {
 	for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
-		$stitchCmdInputs = $stitchCmdInputs + "-i `"$tempdir\clip$($i+1).mkv`" "
+		$stitchCmdInputs = $stitchCmdInputs + "-i `"$tempdir/clip$($i+1).$miniclipFileExt`" "
 		$stitchCmdMapInputs = $stitchCmdMapInputs + "[$i`:v:0][$i`:a:0]"
 	}
 	$stitchCmdMapInputs = $stitchCmdMapInputs + "concat=n=$($finalStartTimestamps.Count)`:v=1:a=1[outv][outa]"
-	$stitchCmd = "ffmpeg -y $stitchCmdInputs-crf 18 -filter_complex `"$stitchCmdMapInputs`" -map `"[outv]`" -map `"[outa]`" `"$dlDir\output.$outputFileExt`""
+	$stitchCmd = "ffmpeg -y $stitchCmdInputs-crf 18 -filter_complex `"$stitchCmdMapInputs`" -map `"[outv]`" -map `"[outa]`" `"$dlDir/output.$outputFileExt`""
 	Invoke-Expression $stitchCmd
 	if ($rescaleVideo.toLower() -eq "true") {
-		ffmpeg -i "$dlDir\output.$outputFileExt" -vf scale=1920x1080:flags=bicubic "$dlDir\outputSCALED.$outputFileExt"
-		Remove-Item -Path "$dlDir\output.$outputFileExt"
-    Rename-Item -Path "$dlDir\outputSCALED.$outputFileExt" -NewName "$outputTitle.$outputFileExt"
+		ffmpeg -i "$dlDir/output.$outputFileExt" -vf scale=1920x1080:flags=bicubic "$dlDir/outputSCALED.$outputFileExt"
+		Remove-Item -Path "$dlDir/output.$outputFileExt"
+    Rename-Item -Path "$dlDir/outputSCALED.$outputFileExt" -NewName "$outputTitle.$outputFileExt"
 	} elseif ($outputTitle -ne "output") {
-		Rename-Item -Path "$dlDir\output.$outputFileExt" -NewName "$outputTitle.$outputFileExt"
+		Rename-Item -Path "$dlDir/output.$outputFileExt" -NewName "$outputTitle.$outputFileExt"
 	}
 	Get-Job | Stop-Job | Remove-Job
 	if ($finalStartTimestamps.Count -ge 2) {
 		for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
-			Remove-Item -Path "$tempdir\clip$($i+1).$miniclipFileExt"
+			Remove-Item -Path "$tempdir/clip$($i+1).$miniclipFileExt"
 		}
 	}
+	Write-Output "Clipping Complete!"
 }
+rm -R $tempdir
