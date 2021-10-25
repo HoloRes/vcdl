@@ -225,13 +225,13 @@ if ($siteType.toLower() -eq "youtube") {
 	$ytdlAttempts = 0
 	while (!$avFileLinks -and $ytdlAttempts -lt 5) {
 		if ($customFormat -ne "NONE") {
-			$avFileLinks = youtube-dl -f $customFormat -g --youtube-skip-dash-manifest "$videoLink"
+			$avFileLinks = yt-dlp -f $customFormat -g --youtube-skip-dash-manifest "$videoLink"
 			$ytdlAttempts++
 		} else {
 			if ($useAltCodecs.toLower() -eq "true") {
-				$avFileLinks = youtube-dl -f "bestvideo[vcodec^=av01]+bestaudio[acodec^=mp4a]/best[vcodec^=av01]" -g --youtube-skip-dash-manifest "$videoLink"
+				$avFileLinks = yt-dlp -f "bestvideo[vcodec^=av01]+bestaudio[acodec^=mp4a]/best[vcodec^=av01]" -g --youtube-skip-dash-manifest "$videoLink"
 			} else {
-				$avFileLinks = youtube-dl -f "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/best[vcodec^=avc1]" -g --youtube-skip-dash-manifest "$videoLink"
+				$avFileLinks = yt-dlp -f "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/best[vcodec^=avc1]" -g --youtube-skip-dash-manifest "$videoLink"
 			}
 			$ytdlAttempts++
 		}
@@ -245,7 +245,7 @@ if ($siteType.toLower() -eq "youtube") {
 if ($siteType.toLower() -eq "other") {
 	$ytdlAttempts = 0
 	while (!$avLink -and $ytdlAttempts -lt 5) {
-		$avLink = youtube-dl -f "best" -g "$videoLink" --add-header Accept:'*/*'
+		$avLink = yt-dlp -f "best" -g "$videoLink" --add-header Accept:'*/*'
 		$ytdlAttempts++
 	}
 	if ($ytdlAttempts -eq 5) {
@@ -398,4 +398,3 @@ if ($finalStartTimestamps.Count -ge 2) {
 	}
 	Write-Output "Clipping Complete!"
 }
-rm -R $tempdir

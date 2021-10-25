@@ -12,13 +12,13 @@ HoloClipper is a PowerShell-based clipping script for downloading specific porti
 
 - ffmpeg
 - ffprobe
-- youtube-dl
+- yt-dlp
 
 **All required executables must be added to the system PATH.** You can find a good article detailing how to add programs to the system PATH on Windows 7, 8, and 10 [here](https://www.howtogeek.com/118594/how-to-edit-your-system-path-for-easy-command-line-access/).
 
-# Revision 9 Changelog
-- Completely rewrote timestamp parser
-- Modified parameter names
+# Revision 10 Changelog
+- Use yt-dlp instead of youtube-dl
+- Yeet `rm -R $tempdir`
 
 | Old Name | New Name |
 |:---------|:---------|
