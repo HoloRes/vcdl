@@ -11,25 +11,14 @@ HoloClipper is a PowerShell-based clipping script for downloading specific porti
 ## Requirements
 
 - ffmpeg
-- ffprobe
 - yt-dlp
 
-**All required executables must be added to the system PATH.** You can find a good article detailing how to add programs to the system PATH on Windows 7, 8, and 10 [here](https://www.howtogeek.com/118594/how-to-edit-your-system-path-for-easy-command-line-access/).
+**It is highly recommended that you add the ffmpeg and yt-dlp executables to your system PATH, but it is not required.** If you wish, you can place the `ffmpeg.exe` and `yt-dlp.exe` files in the same folder as the `clipper.ps1` script, and set the <br>`-useLocalDeps` argument to `true` and the script will work. You can find a good article detailing how to add programs to the system PATH on Windows 7, 8, and 10 [here](https://www.howtogeek.com/118594/how-to-edit-your-system-path-for-easy-command-line-access/).
 
-# Revision 10 Changelog
-- Use yt-dlp instead of youtube-dl
-- Yeet `rm -R $tempdir`
-
-| Old Name | New Name |
-|:---------|:---------|
-| fulltitle | outputTitle |
-| videotype | siteType |
-| inlink | videoLink |
-| timestampsIn | timestamps |
-| fileOutExt | outputFileExt |
-
-- Removed clip stitching with black screen seperator
-- Added customizable miniclip time buffer (The time added to the start and end of each miniclip)
+# Revision 11 Changelog
+- Reworked downloading and merging of clips
+- Added new argument: `-useLocalDeps`. This argument, when set to `true`, will use ffmpeg and yt-dlp executables located in the same folder as the script instead of using the executables located in PATH.
+- Removed ffprobe as a dependency
 
 # General Usage Guide
 
@@ -56,7 +45,8 @@ There are only 3 arguments you are required to pass:
 | outputFileExt | string | The file extension for the final video file.<br>Changing this can result in extra re-encoding based on your settings, so use at your own risk.<br>`mp4` by default. | **YES** |
 | miniclipFileExt | string | The file extension for each miniclip if you have multiple timestamp pairs.<br>This parameter only works when `-doNotStitch` is set to `true`.<br>`mp4` by default. | **YES** |
 | useAltCodecs | boolean (true/false) | Allows the script to download videos above 1080p using YouTube's VP9 and AV1 codecs.<br>If set to `true`, this parameter will add extra re-encoding.<br>`false` by default. | **YES** |
-| rescaleVideo | boolean (true/false) | Rescales the stitched clip to 1080p.<br>Intended to be used with videos below 1080p.<br>`false` by default. | **NO** |
+| rescaleVideo | boolean (true/false) | Rescales the stitched clip to 1080p.<br>Intended to be used with videos below 1080p.<br>`false` by default. | **YES** |
 | doNotStitch | boolean (true/false) | If more than one pair of timestamps are passed, this will save each timestamp pair as its own video.<br>Works in conjunction with `-miniclipFileExt`.<br>`false` by default. | **YES** |
-| paddingInt | integer (0-30) | Specifies the amount of time, in seconds, to add to the start and end of each miniclip.<br>This extra time is referred to as the "time buffer" in these docs.<br>`5` by default. | **NO** |
-| parallelChunkSize | integer (0+) | Specifies the maximum number of ffmpeg processes to run in parallel.<br>Mainly used to help lower the memory footprint of the script.<br>Setting this to a value over 10 is not advised, do so at your own risk.<br>`5` by default. | **YES** |
+| paddingInt | integer (0-30) | Specifies the amount of time, in seconds, to add to the start and end of each miniclip.<br>This extra time is referred to as the "time buffer" in these docs.<br>`5` by default. | **YES** |
+| parallelChunkSize | even integer (0+) | Specifies the maximum number of ffmpeg processes to run in parallel.<br>Mainly used to help lower the memory footprint of the script.<br>Setting this to a value over 10 is not advised, do so at your own risk.<br>`6` by default. | **YES** |
+| useLocalDeps | boolean (true/false) | Uses ffmpeg and yt-dlp .exe's located in the same folder as the script instead of PATH | **YES** |

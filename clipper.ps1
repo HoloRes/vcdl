@@ -1,5 +1,5 @@
-# HoloClipper Revision 9 Version 2
-# I forgor 💀
+# HoloClipper Revision 11 Version 1
+# I regret writing this in PowerShell
 
 # Written and Tested by Sheer Curiosity
 param (
@@ -13,6 +13,7 @@ param (
 	[string]$useAltCodecs = "false",
 	[string]$rescaleVideo = "false",
 	[string]$doNotStitch = "false",
+	[string]$useLocalDeps = "false",
 	[string]$customFormat = "NONE", # For Hololive Resort's internal project manager Ikari. No documentation will be provided for this parameter, use only if you know what you're doing.
 	[string]$isIkari = "false", # For Hololive Resort's internal project manager Ikari. No documentation will be provided for this parameter, use only if you know what you're doing.
 	[int]$paddingInt = 5,
@@ -78,18 +79,20 @@ if ($parallelChunkSize -lt 0) {
 	$parallelChunkSize = 0
 }
 
-Get-Job | Stop-Job | Remove-Job
-
 # Global Variables
-$tempdir = $env:TEMP
-if ($isIkari.toLower() -eq "true" -or $null -eq $tempdir) {
-	$tempdir = "./temp"
-	if (!(Test-Path -Path $tempdir)) {
-		mkdir $tempdir
-	}
+$tempdir = "./temp"
+$ffmpegExecutable = "ffmpeg.exe"
+$ytdlExecutable = "yt-dlp.exe"
+if (!(Test-Path -Path $tempdir)) {
+	mkdir $tempdir
+}
+if ($useLocalDeps.toLower() -eq "true") {
+	$ffmpegExecutable = "./ffmpeg.exe"
+	$ytdlExecutable = "./yt-dlp.exe"
 }
 $finalStartTimestamps = [System.Collections.ArrayList]@()
 $finalRuntimeTimestamps = [System.Collections.ArrayList]@()
+$ffmpegProcesses = [System.Collections.ArrayList]@()
 
 function getTimestamps() {
 	function parserCheck($clipstamps) {
@@ -225,13 +228,13 @@ if ($siteType.toLower() -eq "youtube") {
 	$ytdlAttempts = 0
 	while (!$avFileLinks -and $ytdlAttempts -lt 5) {
 		if ($customFormat -ne "NONE") {
-			$avFileLinks = yt-dlp -f $customFormat -g --youtube-skip-dash-manifest "$videoLink"
+			$avFileLinks = & $ytdlExecutable -f $customFormat -g --youtube-skip-dash-manifest "$videoLink"
 			$ytdlAttempts++
 		} else {
 			if ($useAltCodecs.toLower() -eq "true") {
-				$avFileLinks = yt-dlp -f "bestvideo[vcodec^=av01]+bestaudio[acodec^=mp4a]/best[vcodec^=av01]" -g --youtube-skip-dash-manifest "$videoLink"
+				$avFileLinks = & $ytdlExecutable -f "bestvideo[vcodec^=av01]+bestaudio[acodec^=mp4a]/best[vcodec^=av01]" -g --youtube-skip-dash-manifest "$videoLink"
 			} else {
-				$avFileLinks = yt-dlp -f "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/best[vcodec^=avc1]" -g --youtube-skip-dash-manifest "$videoLink"
+				$avFileLinks = & $ytdlExecutable -f "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/best[vcodec^=avc1]" -g --youtube-skip-dash-manifest "$videoLink"
 			}
 			$ytdlAttempts++
 		}
@@ -245,7 +248,7 @@ if ($siteType.toLower() -eq "youtube") {
 if ($siteType.toLower() -eq "other") {
 	$ytdlAttempts = 0
 	while (!$avLink -and $ytdlAttempts -lt 5) {
-		$avLink = yt-dlp -f "best" -g "$videoLink" --add-header Accept:'*/*'
+		$avLink = & $ytdlExecutable -f "best" -g "$videoLink" --add-header Accept:'*/*'
 		$ytdlAttempts++
 	}
 	if ($ytdlAttempts -eq 5) {
@@ -253,122 +256,169 @@ if ($siteType.toLower() -eq "other") {
 		Throw "ERROR: YTDL failed to fetch media links"
 	}
 }
+
 for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 	if ($siteType.toLower() -eq "youtube") {
-  	if ($finalStartTimestamps.Count -eq 1) {
+		if ($finalStartTimestamps.Count -eq 1) {
 			if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
-				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v copy "$dlDir/$outputTitle.vid.mkv"
-				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($aLink) -t $finalRuntimeTimestamps[$i] -c:a copy "$dlDir/$outputTitle.aud.m4a"
-				if ($outputFileExt -eq "mkv") {
-					ffmpeg -y -i "$dlDir/$outputTitle.vid.mkv" -i "$dlDir/$outputTitle.aud.m4a" -c copy "$dlDir/$outputTitle.mkv"
-				} elseif ($outputFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
-					ffmpeg -y -i "$dlDir/$outputTitle.vid.mkv" -i "$dlDir/$outputTitle.aud.m4a" -c copy "$dlDir/$outputTitle.mp4"
-				} else {
-					ffmpeg -y -i "$dlDir/$outputTitle.vid.mkv" -i "$dlDir/$outputTitle.aud.m4a" -crf 18 "$dlDir/$outputTitle.$outputFileExt"
-				}
-				remove-Item -path "$dlDir/$outputTitle.vid.mkv"
-				remove-Item -path "$dlDir/$outputTitle.aud.m4a"
+				$dlVid = Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -ss $($finalStartTimestamps[$i]) -i `"$vLink`" -t $($finalRuntimeTimestamps[$i]) -c:v copy `"$dlDir/$outputTitle.vid.mkv`"" -PassThru
+				$dlAud = Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -ss $($finalStartTimestamps[$i]) -i `"$aLink`" -t $($finalRuntimeTimestamps[$i]) -c:a copy `"$dlDir/$outputTitle.aud.m4a`"" -PassThru
+				[void]$ffmpegProcesses.Add($dlVid.Id)
+				[void]$ffmpegProcesses.Add($dlAud.Id)
 			} else {
-				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v libx264 "$dlDir/$outputTitle.vid.mkv"
-				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($aLink) -t $finalRuntimeTimestamps[$i] -c:a copy "$dlDir/$outputTitle.aud.m4a"
-				if ($outputFileExt -eq "mkv") {
-					ffmpeg -y -i "$dlDir/$outputTitle.vid.mkv" -i "$dlDir/$outputTitle.aud.m4a" -c copy "$dlDir/$outputTitle.mkv"
-				} elseif ($outputFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
-					ffmpeg -y -i "$dlDir/$outputTitle.vid.mkv" -i "$dlDir/$outputTitle.aud.m4a" -c copy "$dlDir/$outputTitle.mp4"
-				} else {
-					ffmpeg -y -i "$dlDir/$outputTitle.vid.mkv" -i "$dlDir/$outputTitle.aud.m4a" -crf 18 "$dlDir/$outputTitle.$outputFileExt"
-				}
-				remove-Item -path "$dlDir/$outputTitle.vid.mkv"
-				remove-Item -path "$dlDir/$outputTitle.aud.m4a"
-			}
-			Write-Output "Clipping Complete!"
-    }
-    if ($finalStartTimestamps.Count -ge 2) {
-      Start-Job -ScriptBlock {
-        $finalStartTimestamps = $args[0]
-        $finalRuntimeTimestamps = $args[1]
-        $i = $args[2]
-	    $vLink = $args[3]
-        $aLink = $args[4]
-        $tempdir = $args[5]
-		$miniclipFileExt = $args[6]
-		$useAltCodecs = $args[7]
-				if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
-					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v copy "$tempdir/clip$($i+1).vid.mkv"
-					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($aLink) -t $finalRuntimeTimestamps[$i] -c:a copy "$tempdir/clip$($i+1).aud.m4a"
-					if ($miniclipFileExt -eq "mkv") {
-						ffmpeg -y -i "$tempdir/clip$($i+1).vid.mkv" -i "$tempdir/clip$($i+1).aud.m4a" -c copy "$tempdir/clip$($i+1).mkv"
-					} elseif ($miniclipFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
-						ffmpeg -y -i "$tempdir/clip$($i+1).vid.mkv" -i "$tempdir/clip$($i+1).aud.m4a" -c copy "$tempdir/clip$($i+1).mp4"
-					} else {
-						ffmpeg -y -i "$tempdir/clip$($i+1).vid.mkv" -i "$tempdir/clip$($i+1).aud.m4a" -crf 18 "$tempdir/clip$($i+1).$miniclipFileExt"
-					}
-					Remove-Item -Path "$tempdir/clip$($i+1).vid.mkv"
-					Remove-Item -Path "$tempdir/clip$($i+1).aud.m4a"
-				} else {
-					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v libx264 "$tempdir/clip$($i+1).vid.mkv"
-					ffmpeg -y -ss $finalStartTimestamps[$i] -i ($aLink) -t $finalRuntimeTimestamps[$i] -c:a copy "$tempdir/clip$($i+1).aud.m4a"
-					if ($miniclipFileExt -eq "mkv") {
-						ffmpeg -y -i "$tempdir/clip$($i+1).vid.mkv" -i "$tempdir/clip$($i+1).aud.m4a" -c copy "$tempdir/clip$($i+1).mkv"
-					} elseif ($miniclipFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
-						ffmpeg -y -i "$tempdir/clip$($i+1).vid.mkv" -i "$tempdir/clip$($i+1).aud.m4a" -c copy "$tempdir/clip$($i+1).mp4"
-					} else {
-						ffmpeg -y -i "$tempdir/clip$($i+1).vid.mkv" -i "$tempdir/clip$($i+1).aud.m4a" -crf 18 "$tempdir/clip$($i+1).$miniclipFileExt"
-					}
-					Remove-Item -Path "$tempdir/clip$($i+1).vid.mkv"
-					Remove-Item -Path "$tempdir/clip$($i+1).aud.m4a"
-				}
-      } -ArgumentList $finalStartTimestamps, $finalRuntimeTimestamps, $i, $vLink, $aLink, $tempdir, $miniclipFileExt, $useAltCodecs
-      $parallelChunkCount++
-    }
-  }
-  if ($siteType.toLower() -eq "other") {
-    if ($finalStartTimestamps.Count -eq 1) {
-		if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
-			if ($outputFileExt -eq "mkv") {
-				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($avLink) -t $finalRuntimeTimestamps[$i] -c copy "$dlDir/$outputTitle.$outputFileExt"
-			} else {
-				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($avLink) -t $finalRuntimeTimestamps[$i] -crf 18 "$dlDir/$outputTitle.$outputFileExt"
-			}
-		} else {
-			if ($outputFileExt -eq "mkv") {
-				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v libx264 -c:a copy "$dlDir/$outputTitle.$outputFileExt"
-			} else {
-				ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -crf 18 "$dlDir/$outputTitle.$outputFileExt"
+				$dlVid = Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -ss $($finalStartTimestamps[$i]) -i `"$vLink`" -t $($finalRuntimeTimestamps[$i]) -c:v libx264 `"$dlDir/$outputTitle.vid.mkv`"" -PassThru
+				$dlAud = Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -ss $($finalStartTimestamps[$i]) -i `"$aLink`" -t $($finalRuntimeTimestamps[$i]) -c:a copy `"$dlDir/$outputTitle.aud.m4a`"" -PassThru
+				[void]$ffmpegProcesses.Add($dlVid.Id)
+				[void]$ffmpegProcesses.Add($dlAud.Id)
 			}
 		}
-		Write-Output "Clipping Complete!"
-    }
-    if ($finalStartTimestamps.Count -ge 2) {
-      Start-Job -ScriptBlock {
-        $finalStartTimestamps = $args[0]
-        $finalRuntimeTimestamps = $args[1]
-        $i = $args[2]
-        $avLink = $args[3]
-        $tempdir = $args[4]
-				if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
-					if ($miniclipFileExt -eq "mkv") {
-						ffmpeg -y -ss $finalStartTimestamps[$i] -i ($avLink) -t $finalRuntimeTimestamps[$i] -c copy "$tempdir/clip$($i+1).mkv"
-					} else {
-						ffmpeg -y -ss $finalStartTimestamps[$i] -i ($avLink) -t $finalRuntimeTimestamps[$i] -crf 18 "$tempdir/clip$($i+1).$miniclipFileExt"
-					}
+		if ($finalStartTimestamps.Count -ge 2) {
+			if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
+				$dlVid = Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -ss $($finalStartTimestamps[$i]) -i `"$vLink`" -t $($finalRuntimeTimestamps[$i]) -c:v copy `"$tempdir/clip$($i+1).vid.mkv`"" -PassThru
+				$dlAud = Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -ss $($finalStartTimestamps[$i]) -i `"$aLink`" -t $($finalRuntimeTimestamps[$i]) -c:a copy `"$tempdir/clip$($i+1).aud.m4a`"" -PassThru
+				[void]$ffmpegProcesses.Add($dlVid.Id)
+				[void]$ffmpegProcesses.Add($dlAud.Id)
+			} else {
+				$dlVid = Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -ss $($finalStartTimestamps[$i]) -i `"$vLink`" -t $($finalRuntimeTimestamps[$i]) -c:v libx264 `"$tempdir/clip$($i+1).vid.mkv`"" -PassThru
+				$dlAud = Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -ss $($finalStartTimestamps[$i]) -i `"$aLink`" -t $($finalRuntimeTimestamps[$i]) -c:a copy `"$tempdir/clip$($i+1).aud.m4a`"" -PassThru
+				[void]$ffmpegProcesses.Add($dlVid.Id)
+				[void]$ffmpegProcesses.Add($dlAud.Id)
+			}
+		}
+	}
+	if ($siteType.toLower() -eq "other") {
+		if ($finalStartTimestamps.Count -eq 1) {
+			if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
+				if ($outputFileExt -eq "mkv") {
+					$dlOther = Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -ss $($finalStartTimestamps[$i]) -i `"$avLink`" -t $($finalRuntimeTimestamps[$i]) -c:v copy `"$dlDir/$outputTitle.$outputFileExt`"" -PassThru
+					[void]$ffmpegProcesses.Add($dlOther.Id)
 				} else {
-					if ($miniclipFileExt -eq "mkv") {
-						ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -c:v libx264 -c:a copy "$tempdir/clip$($i+1).mkv"
-					} else {
-						ffmpeg -y -ss $finalStartTimestamps[$i] -i ($vLink) -t $finalRuntimeTimestamps[$i] -crf 18 "$tempdir/clip$($i+1).$miniclipFileExt"
-					}
+					$dlOther = Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -ss $($finalStartTimestamps[$i]) -i `"$avLink`" -t $($finalRuntimeTimestamps[$i]) -crf 18 `"$dlDir/$outputTitle.$outputFileExt`"" -PassThru
+					[void]$ffmpegProcesses.Add($dlOther.Id)
 				}
-      } -ArgumentList $finalStartTimestamps, $finalRuntimeTimestamps, $i, $avLink, $tempdir
-      $parallelChunkCount++
-    }
-  }
-  if ($parallelChunkCount -eq $parallelChunkSize) {
-    Get-Job -State Running | Wait-Job
-    $parallelChunkCount = 0
-  }
+			} else {
+				if ($outputFileExt -eq "mkv") {
+					$dlOther = Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -ss $($finalStartTimestamps[$i]) -i `"$avLink`" -t $($finalRuntimeTimestamps[$i]) -c:v libx264 -c:a copy `"$dlDir/$outputTitle.$outputFileExt`"" -PassThru
+					[void]$ffmpegProcesses.Add($dlOther.Id)
+				} else {
+					$dlOther = Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -ss $($finalStartTimestamps[$i]) -i `"$avLink`" -t $($finalRuntimeTimestamps[$i]) -crf 18 `"$dlDir/$outputTitle.$outputFileExt`"" -PassThru
+					[void]$ffmpegProcesses.Add($dlOther.Id)
+				}
+			}
+			Write-Output "Clipping Complete!"
+		}
+		if ($finalStartTimestamps.Count -ge 2) {
+			if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
+				if ($miniclipFileExt -eq "mkv") {
+					$dlOther = Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -ss $($finalStartTimestamps[$i]) -i `"$avLink`" -t $($finalRuntimeTimestamps[$i]) -c:v copy `"$tempdir/clip$($i+1).mkv`"" -PassThru
+					[void]$ffmpegProcesses.Add($dlOther.Id)
+				} else {
+					$dlOther = Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -ss $($finalStartTimestamps[$i]) -i `"$avLink`" -t $($finalRuntimeTimestamps[$i]) -crf 18 `"$tempdir/clip$($i+1).$miniclipFileExt`"" -PassThru
+					[void]$ffmpegProcesses.Add($dlOther.Id)
+				}
+			} else {
+				if ($miniclipFileExt -eq "mkv") {
+					$dlOther = Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -ss $($finalStartTimestamps[$i]) -i `"$avLink`" -t $($finalRuntimeTimestamps[$i]) -c:v libx264 -c:a copy `"$tempdir/clip$($i+1).mkv`"" -PassThru
+					[void]$ffmpegProcesses.Add($dlOther.Id)
+				} else {
+					$dlOther = Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -ss $($finalStartTimestamps[$i]) -i `"$avLink`" -t $($finalRuntimeTimestamps[$i]) -crf 18 `"$tempdir/clip$($i+1).$miniclipFileExt`"" -PassThru
+					[void]$ffmpegProcesses.Add($dlOther.Id)
+				}
+			}
+		}
+	}
+	if ($ffmpegProcesses.Count -ge $parallelChunkSize) {
+		Write-Output "reached ffmpeg process limit, waiting for completion..."
+		Wait-Process -Id $ffmpegProcesses
+		$ffmpegProcesses.Clear()
+	}
 }
-Get-Job -State Running | Wait-Job
+if ($ffmpegProcesses.Count -ge 1) {
+	Wait-Process -Id $ffmpegProcesses
+	$ffmpegProcesses.Clear()
+}
+Write-Output "Downloading Complete"
+
+for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
+	if ($siteType.toLower() -eq "youtube") {
+		if ($finalStartTimestamps.Count -eq 1) {
+			if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
+				if ($outputFileExt -eq "mkv") {
+					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$dlDir/$outputTitle.vid.mkv`" -i `"$dlDir/$outputTitle.aud.m4a`" -c copy `"$dlDir/$outputTitle.mkv`"" -PassThru
+					[void]$ffmpegProcesses.Add($mergeClips.Id)
+				} elseif ($outputFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
+					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$dlDir/$outputTitle.vid.mkv`" -i `"$dlDir/$outputTitle.aud.m4a`" -c copy `"$dlDir/$outputTitle.mp4`"" -PassThru
+					[void]$ffmpegProcesses.Add($mergeClips.Id)
+				} else {
+					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$dlDir/$outputTitle.vid.mkv`" -i `"$dlDir/$outputTitle.aud.m4a`" -crf 18 `"$dlDir/$outputTitle.$outputFileExt`"" -PassThru
+					[void]$ffmpegProcesses.Add($mergeClips.Id)
+				}
+			} else {
+				if ($outputFileExt -eq "mkv") {
+					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$dlDir/$outputTitle.vid.mkv`" -i `"$dlDir/$outputTitle.aud.m4a`" -c copy `"$dlDir/$outputTitle.mkv`"" -PassThru
+					[void]$ffmpegProcesses.Add($mergeClips.Id)
+				} elseif ($outputFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
+					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$dlDir/$outputTitle.vid.mkv`" -i `"$dlDir/$outputTitle.aud.m4a`" -c copy `"$dlDir/$outputTitle.mp4`"" -PassThru
+					[void]$ffmpegProcesses.Add($mergeClips.Id)
+				} else {
+					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$dlDir/$outputTitle.vid.mkv`" -i `"$dlDir/$outputTitle.aud.m4a`" -crf 18 `"$dlDir/$outputTitle.$outputFileExt`"" -PassThru
+					[void]$ffmpegProcesses.Add($mergeClips.Id)
+				}
+			}
+		}
+		if ($finalStartTimestamps.Count -ge 2) {
+			if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
+				if ($miniclipFileExt -eq "mkv") {
+					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$tempdir/clip$($i+1).vid.mkv`" -i `"$tempdir/clip$($i+1).aud.m4a`" -c copy `"$tempdir/clip$($i+1).mkv`"" -PassThru
+					[void]$ffmpegProcesses.Add($mergeClips.Id)
+				} elseif ($miniclipFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
+					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$tempdir/clip$($i+1).vid.mkv`" -i `"$tempdir/clip$($i+1).aud.m4a`" -c copy `"$tempdir/clip$($i+1).mp4`"" -PassThru
+					[void]$ffmpegProcesses.Add($mergeClips.Id)
+				} else {
+					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$tempdir/clip$($i+1).vid.mkv`" -i `"$tempdir/clip$($i+1).aud.m4a`" -crf 18 `"$tempdir/clip$($i+1).$miniclipFileExt`"" -PassThru
+					[void]$ffmpegProcesses.Add($mergeClips.Id)
+				}
+			} else {
+				if ($miniclipFileExt -eq "mkv") {
+					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$tempdir/clip$($i+1).vid.mkv`" -i `"$tempdir/clip$($i+1).aud.m4a`" -c copy `"$tempdir/clip$($i+1).mkv`"" -PassThru
+					[void]$ffmpegProcesses.Add($mergeClips.Id)
+				} elseif ($miniclipFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
+					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$tempdir/clip$($i+1).vid.mkv`" -i `"$tempdir/clip$($i+1).aud.m4a`" -c copy `"$tempdir/clip$($i+1).mp4`"" -PassThru
+					[void]$ffmpegProcesses.Add($mergeClips.Id)
+				} else {
+					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$tempdir/clip$($i+1).vid.mkv`" -i `"$tempdir/clip$($i+1).aud.m4a`" -crf 18 `"$tempdir/clip$($i+1).$miniclipFileExt`"" -PassThru
+					[void]$ffmpegProcesses.Add($mergeClips.Id)
+				}
+			}
+		}
+	}
+	if ($siteType.toLower() -eq "other") {
+		Write-Output "Skipping Merge Step..."
+	}
+	if ($ffmpegProcesses.Count -ge $parallelChunkSize) {
+		Write-Output "reached ffmpeg process limit, waiting for completion..."
+		Wait-Process -Id $ffmpegProcesses
+		$ffmpegProcesses.Clear()
+	}
+}
+if ($ffmpegProcesses.Count -ge 1) {
+	Wait-Process -Id $ffmpegProcesses
+	$ffmpegProcesses.Clear()
+}
+if ($siteType.toLower() -eq "youtube") {
+	Write-Output "Merging Complete"
+}
+for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
+	if ($finalStartTimestamps.Count -eq 1) {
+		Remove-Item -path "$dlDir/$outputTitle.vid.mkv"
+		Remove-Item -path "$dlDir/$outputTitle.aud.m4a"
+	}
+	if ($finalStartTimestamps.Count -ge 2) {
+		Remove-Item -Path "$tempdir/clip$($i+1).vid.mkv"
+		Remove-Item -Path "$tempdir/clip$($i+1).aud.m4a"
+	}
+}
+
 if ($doNotStitch.toLower() -eq "true") {
 	for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 		Move-Item -Path "$tempdir/clip$($i+1).$miniclipFileExt" -Destination "$dlDir/$outputTitle`_clip$($i+1).$miniclipFileExt"
@@ -381,16 +431,15 @@ if ($finalStartTimestamps.Count -ge 2) {
 		$stitchCmdMapInputs = $stitchCmdMapInputs + "[$i`:v:0][$i`:a:0]"
 	}
 	$stitchCmdMapInputs = $stitchCmdMapInputs + "concat=n=$($finalStartTimestamps.Count)`:v=1:a=1[outv][outa]"
-	$stitchCmd = "ffmpeg -y $stitchCmdInputs-crf 18 -filter_complex `"$stitchCmdMapInputs`" -map `"[outv]`" -map `"[outa]`" `"$dlDir/output.$outputFileExt`""
+	$stitchCmd = "$ffmpegExecutable -y $stitchCmdInputs-crf 18 -filter_complex `"$stitchCmdMapInputs`" -map `"[outv]`" -map `"[outa]`" `"$dlDir/output.$outputFileExt`""
 	Invoke-Expression $stitchCmd
 	if ($rescaleVideo.toLower() -eq "true") {
-		ffmpeg -i "$dlDir/output.$outputFileExt" -vf scale=1920x1080:flags=bicubic "$dlDir/outputSCALED.$outputFileExt"
+		& $ffmpegExecutable -i "$dlDir/output.$outputFileExt" -vf scale=1920x1080:flags=bicubic "$dlDir/outputSCALED.$outputFileExt"
 		Remove-Item -Path "$dlDir/output.$outputFileExt"
     Rename-Item -Path "$dlDir/outputSCALED.$outputFileExt" -NewName "$outputTitle.$outputFileExt"
 	} elseif ($outputTitle -ne "output") {
 		Rename-Item -Path "$dlDir/output.$outputFileExt" -NewName "$outputTitle.$outputFileExt"
 	}
-	Get-Job | Stop-Job | Remove-Job
 	if ($finalStartTimestamps.Count -ge 2) {
 		for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 			Remove-Item -Path "$tempdir/clip$($i+1).$miniclipFileExt"
