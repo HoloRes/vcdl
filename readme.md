@@ -1,6 +1,6 @@
-# PowerShell Clipper (HoloClipper)
-## What is HoloClipper?
-HoloClipper is a PowerShell-based clipping script for downloading specific portions of videos from YouTube and other video sites. It runs natively on Windows, and on Linux / macOS with PowerShell installed. You can download PowerShell [here](https://github.com/PowerShell/PowerShell), from the official repository.
+# VCDL (VTuber Clip Downloader)
+## What is VCDL?
+VCDL is a PowerShell-based clipping script for downloading specific portions of videos from YouTube and other video sites. It runs natively on Windows, and on Linux / macOS with PowerShell installed. You can download PowerShell [here](https://github.com/PowerShell/PowerShell), from the official repository.
 
 | Platform | Compatible Powershell Versions |
 |:---------|:-------------------------------|
