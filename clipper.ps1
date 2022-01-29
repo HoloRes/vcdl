@@ -1,22 +1,61 @@
-# HoloClipper Revision 11 Version 1
-# I regret writing this in PowerShell
+<#
+.SYNOPSIS
+	Tool for automating the clipping process
+.DESCRIPTION
+	HoloClipper Revision 11 Version 1
+	I regret writing this in PowerShell
 
-# Written and Tested by Sheer Curiosity
+	VCDL is a PowerShell-based clipping script for downloading specific portions of videos from YouTube and other video
+	sites. It runs natively on Windows, and on Linux / macOS with PowerShell installed.
+
+	Written and Tested by Sheer Curiosity
+.LINK
+	https://github.com/HoloRes/vcdl/blob/main/readme.md
+#>
 param (
-	[string]$outputTitle = "output", # Defines the output filename, without extension    Options: Any Title You Want
-	[string]$siteType = $null, # Defines the type of video being clipped                 Options: Youtube, Other
-	[string]$videoLink = $null, # Defines input link                                     Options: YouTube Links and Direct Video File Links
-	[string]$dlDir = ".", # Defines the download directory for the final file            Options: Any Directory On Your PC
-	[string]$timestamps = $null, # Defines the timestamps to be clipped                  Options: Timestamps In This Format (Add Comma & No Space For Multiple Subclips): [xx:xx:xx-xx:xx:xx],[xx:xx:xx-xx:xx:xx]
-	[string]$outputFileExt = "mp4", # Defines the output file extension                  Options: Any Video Extensions Supported By FFMPEG
+	# Output filename, without extension. Any valid string works, but keep in mind not all characters are valid
+	# as part of a filname. On windows these characters are forbidden: < > : " / \ | ? *
+	[string]$outputTitle = "output",
+	# Deprecated, now determined automatically
+	[string]$siteType,
+	# Link to download video from. May be any link that yt-dlp is able to recognize.
+	[Parameter(Mandatory=$true, Position=0)]
+	[uri]$videoLink,
+	# Output directory for the final file. Should be a directory on your PC.
+	[Alias("outputDirectory")]
+	[string]$dlDir = ".",
+	# Timestamps to be clipped. Multiple subclips are separated by commas without spaces
+	# Example: [hh:mm:ss-hh:mm:ss]
+	# Example: [hh:mm:ss-hh:mm:ss],[hh:mm:ss-hh:mm:ss]
+	[Parameter(Mandatory=$true, Position=1)]
+	[string]$timestamps,
+	# Output file extension. May be any extension type that FFMPEG supports.
+	[string]$outputFileExt = "mp4",
+	# Output file extension. May be any extension type that FFMPEG supports.
 	[string]$miniclipFileExt = "mp4",
-	[string]$useAltCodecs = "false",
-	[string]$rescaleVideo = "false",
-	[string]$doNotStitch = "false",
-	[string]$useLocalDeps = "false",
-	[string]$customFormat = "NONE", # For Hololive Resort's internal project manager Ikari. No documentation will be provided for this parameter, use only if you know what you're doing.
-	[string]$isIkari = "false", # For Hololive Resort's internal project manager Ikari. No documentation will be provided for this parameter, use only if you know what you're doing.
+	# Allows the script to download videos above 1080p using YouTube's VP9 and AV1 codecs.
+	# If set, this parameter will add extra re-encoding.
+	[switch]$useAltCodecs,
+	# Rescales the stitched clip to 1080p. Intended to be used with videos below 1080p.
+	[switch]$rescaleVideo,
+	# If more than one pair of timestamps are passed, this will save each timestamp pair as its own video.
+	# Works in conjunction with -miniclipFileExt.
+	[switch]$doNotStitch,
+	# Deprecated, now determined automatically
+	[switch]$useLocalDeps,
+	# For Hololive Resort's internal project manager Ikari. No documentation will be provided for this parameter,
+	# use only if you know what you're doing.
+	[string]$customFormat = "NONE",
+	# For Hololive Resort's internal project manager Ikari. No documentation will be provided for this parameter,
+	# use only if you know what you're doing.
+	[switch]$isIkari,
+	# Specifies the amount of time, in seconds, to add to the start and end of each miniclip. Between 0 and 30.
+	# This extra time is referred to as the "time buffer" in the online docs.
+	[ValidateRange(0, 30)]
 	[int]$paddingInt = 5,
+	# Specifies the maximum number of ffmpeg processes to run in parallel. Mainly used to help lower the memory
+	# footprint of the script. Setting this to a value over 10 is not advised, do so at your own risk.
+	[ValidateRange(0, [int]::MaxValue)]
 	[int]$parallelChunkSize = 5
 )
 
@@ -37,59 +76,37 @@ $ffmpegExts = @(
 )
 
 # Input Checks
-if (!$siteType -or !$videoLink -or !$timestamps) {
-	Throw "ERROR: Missing Parameters"
-}
-if ($useAltCodecs.toLower() -ne "false" -and $useAltCodecs.toLower() -ne "true") {
-	Throw "ERROR: Invalid input for parameter -useAltCodecs"
-}
-if ($rescaleVideo.toLower() -ne "false" -and $rescaleVideo.toLower() -ne "true") {
-	Throw "ERROR: Invalid input for parameter -rescaleVideo"
-}
-if ($doNotStitch.toLower() -ne "false" -and $doNotStitch.toLower() -ne "true") {
-	Throw "ERROR: Invalid input for parameter -doNotStitch"
-}
-if ($siteType.ToLower() -ne "youtube" -and $siteType.ToLower() -ne "other") {
-	Throw "ERROR: Invalid site type"
-}
-if ($ffmpegExts -cnotcontains $outputFileExt.toLower()) {
+if ($ffmpegExts -notcontains $outputFileExt -or $ffmpegExts -notcontains $miniclipFileExt) {
 	Throw "ERROR: Invalid output file extension"
 }
-if ($ffmpegExts -cnotcontains $miniclipFileExt.toLower()) {
-	Throw "ERROR: Invalid output file extension"
+if ($videoLink.Host -like "*youtube*" -or $videoLink.Host -like "*youtu.be*") {
+	$siteType = "youtube"
+} else {
+	$siteType = "other"
 }
-if ($useAltCodecs.toLower() -eq "true" -and $siteType.toLower() -eq "other") {
+if ($useAltCodecs -and $siteType -eq "other") {
 	Write-Warning "Alternate codecs not supported on other video sites, ignoring -useAltCodecs parameter."
 }
-if ($doNotStitch.toLower() -ne "true" -and $miniclipFileExt -ne "mp4") {
-	Write-Warning "-doNotStitch is unspecified or false, ignoring -miniclipFileExt."
+if (!$doNotStitch -and $miniclipFileExt -ne "mp4") {
+	Write-Warning "-doNotStitch is false, ignoring -miniclipFileExt."
 	$miniclipFileExt = "mp4"
-}
-# Hmm, could have sworn there used to be some extra warnings here... oh well.
-if ($paddingInt -gt 30) {
-	$paddingInt = 30
-}
-if ($paddingInt -lt 0) {
-	$paddingInt = 0
-}
-if ($paddingInt -gt 60) {
-	$paddingInt = 60
-}
-if ($parallelChunkSize -lt 0) {
-	$parallelChunkSize = 0
 }
 
 # Global Variables
 $tempdir = "./temp"
-$ffmpegExecutable = "ffmpeg.exe"
-$ytdlExecutable = "yt-dlp.exe"
 if (!(Test-Path -Path $tempdir)) {
 	mkdir $tempdir
 }
-if ($useLocalDeps.toLower() -eq "true") {
-	$ffmpegExecutable = "./ffmpeg.exe"
-	$ytdlExecutable = "./yt-dlp.exe"
+
+$oldPATH = $env:PATH
+$env:PATH += ";."
+$ffmpegExecutable = Get-Command -Type Application "ffmpeg.exe" -ErrorAction SilentlyContinue
+$ytdlExecutable = Get-Command -Type Application "yt-dlp.exe" -ErrorAction SilentlyContinue
+$env:PATH = $oldPATH
+if (!$ffmpegExecutable -or !$ytdlExecutable) {
+	Throw "Missing needed executables. Please make sure ffmpeg and yt-dlp are on your PATH, or in the current folder."
 }
+
 $finalStartTimestamps = [System.Collections.ArrayList]@()
 $finalRuntimeTimestamps = [System.Collections.ArrayList]@()
 $ffmpegProcesses = [System.Collections.ArrayList]@()
@@ -224,14 +241,14 @@ function getTimestamps() {
 }
 
 $finalStartTimestamps, $finalRuntimeTimestamps = getTimestamps
-if ($siteType.toLower() -eq "youtube") {
+if ($siteType -eq "youtube") {
 	$ytdlAttempts = 0
 	while (!$avFileLinks -and $ytdlAttempts -lt 5) {
 		if ($customFormat -ne "NONE") {
 			$avFileLinks = & $ytdlExecutable -f $customFormat -g --youtube-skip-dash-manifest "$videoLink"
 			$ytdlAttempts++
 		} else {
-			if ($useAltCodecs.toLower() -eq "true") {
+			if ($useAltCodecs) {
 				$avFileLinks = & $ytdlExecutable -f "bestvideo[vcodec^=av01]+bestaudio[acodec^=mp4a]/best[vcodec^=av01]" -g --youtube-skip-dash-manifest "$videoLink"
 			} else {
 				$avFileLinks = & $ytdlExecutable -f "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/best[vcodec^=avc1]" -g --youtube-skip-dash-manifest "$videoLink"
@@ -245,7 +262,7 @@ if ($siteType.toLower() -eq "youtube") {
 	}
 	$vLink, $aLink = $avFileLinks.split(" ")
 }
-if ($siteType.toLower() -eq "other") {
+if ($siteType -eq "other") {
 	$ytdlAttempts = 0
 	while (!$avLink -and $ytdlAttempts -lt 5) {
 		$avLink = & $ytdlExecutable -f "best" -g "$videoLink" --add-header Accept:'*/*'
@@ -258,7 +275,7 @@ if ($siteType.toLower() -eq "other") {
 }
 
 for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
-	if ($siteType.toLower() -eq "youtube") {
+	if ($siteType -eq "youtube") {
 		if ($finalStartTimestamps.Count -eq 1) {
 			if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
 				$dlVid = Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -ss $($finalStartTimestamps[$i]) -i `"$vLink`" -t $($finalRuntimeTimestamps[$i]) -c:v copy `"$dlDir/$outputTitle.vid.mkv`"" -PassThru
@@ -286,7 +303,7 @@ for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 			}
 		}
 	}
-	if ($siteType.toLower() -eq "other") {
+	if ($siteType -eq "other") {
 		if ($finalStartTimestamps.Count -eq 1) {
 			if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
 				if ($outputFileExt -eq "mkv") {
@@ -340,13 +357,13 @@ if ($ffmpegProcesses.Count -ge 1) {
 Write-Output "Downloading Complete"
 
 for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
-	if ($siteType.toLower() -eq "youtube") {
+	if ($siteType -eq "youtube") {
 		if ($finalStartTimestamps.Count -eq 1) {
 			if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
 				if ($outputFileExt -eq "mkv") {
 					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$dlDir/$outputTitle.vid.mkv`" -i `"$dlDir/$outputTitle.aud.m4a`" -c copy `"$dlDir/$outputTitle.mkv`"" -PassThru
 					[void]$ffmpegProcesses.Add($mergeClips.Id)
-				} elseif ($outputFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
+				} elseif ($outputFileExt -eq "mp4" -and !$useAltCodecs) {
 					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$dlDir/$outputTitle.vid.mkv`" -i `"$dlDir/$outputTitle.aud.m4a`" -c copy `"$dlDir/$outputTitle.mp4`"" -PassThru
 					[void]$ffmpegProcesses.Add($mergeClips.Id)
 				} else {
@@ -357,7 +374,7 @@ for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 				if ($outputFileExt -eq "mkv") {
 					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$dlDir/$outputTitle.vid.mkv`" -i `"$dlDir/$outputTitle.aud.m4a`" -c copy `"$dlDir/$outputTitle.mkv`"" -PassThru
 					[void]$ffmpegProcesses.Add($mergeClips.Id)
-				} elseif ($outputFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
+				} elseif ($outputFileExt -eq "mp4" -and !$useAltCodecs) {
 					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$dlDir/$outputTitle.vid.mkv`" -i `"$dlDir/$outputTitle.aud.m4a`" -c copy `"$dlDir/$outputTitle.mp4`"" -PassThru
 					[void]$ffmpegProcesses.Add($mergeClips.Id)
 				} else {
@@ -371,7 +388,7 @@ for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 				if ($miniclipFileExt -eq "mkv") {
 					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$tempdir/clip$($i+1).vid.mkv`" -i `"$tempdir/clip$($i+1).aud.m4a`" -c copy `"$tempdir/clip$($i+1).mkv`"" -PassThru
 					[void]$ffmpegProcesses.Add($mergeClips.Id)
-				} elseif ($miniclipFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
+				} elseif ($miniclipFileExt -eq "mp4" -and !$useAltCodecs) {
 					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$tempdir/clip$($i+1).vid.mkv`" -i `"$tempdir/clip$($i+1).aud.m4a`" -c copy `"$tempdir/clip$($i+1).mp4`"" -PassThru
 					[void]$ffmpegProcesses.Add($mergeClips.Id)
 				} else {
@@ -382,7 +399,7 @@ for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 				if ($miniclipFileExt -eq "mkv") {
 					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$tempdir/clip$($i+1).vid.mkv`" -i `"$tempdir/clip$($i+1).aud.m4a`" -c copy `"$tempdir/clip$($i+1).mkv`"" -PassThru
 					[void]$ffmpegProcesses.Add($mergeClips.Id)
-				} elseif ($miniclipFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
+				} elseif ($miniclipFileExt -eq "mp4" -and !$useAltCodecs) {
 					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$tempdir/clip$($i+1).vid.mkv`" -i `"$tempdir/clip$($i+1).aud.m4a`" -c copy `"$tempdir/clip$($i+1).mp4`"" -PassThru
 					[void]$ffmpegProcesses.Add($mergeClips.Id)
 				} else {
@@ -392,7 +409,7 @@ for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 			}
 		}
 	}
-	if ($siteType.toLower() -eq "other") {
+	if ($siteType -eq "other") {
 		Write-Output "Skipping Merge Step..."
 	}
 	if ($ffmpegProcesses.Count -ge $parallelChunkSize) {
@@ -405,7 +422,7 @@ if ($ffmpegProcesses.Count -ge 1) {
 	Wait-Process -Id $ffmpegProcesses
 	$ffmpegProcesses.Clear()
 }
-if ($siteType.toLower() -eq "youtube") {
+if ($siteType -eq "youtube") {
 	Write-Output "Merging Complete"
 }
 for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
@@ -419,7 +436,7 @@ for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 	}
 }
 
-if ($doNotStitch.toLower() -eq "true") {
+if ($doNotStitch) {
 	for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 		Move-Item -Path "$tempdir/clip$($i+1).$miniclipFileExt" -Destination "$dlDir/$outputTitle`_clip$($i+1).$miniclipFileExt"
 	}
@@ -433,7 +450,7 @@ if ($finalStartTimestamps.Count -ge 2) {
 	$stitchCmdMapInputs = $stitchCmdMapInputs + "concat=n=$($finalStartTimestamps.Count)`:v=1:a=1[outv][outa]"
 	$stitchCmd = "$ffmpegExecutable -y $stitchCmdInputs-crf 18 -filter_complex `"$stitchCmdMapInputs`" -map `"[outv]`" -map `"[outa]`" `"$dlDir/output.$outputFileExt`""
 	Invoke-Expression $stitchCmd
-	if ($rescaleVideo.toLower() -eq "true") {
+	if ($rescaleVideo) {
 		& $ffmpegExecutable -i "$dlDir/output.$outputFileExt" -vf scale=1920x1080:flags=bicubic "$dlDir/outputSCALED.$outputFileExt"
 		Remove-Item -Path "$dlDir/output.$outputFileExt"
     Rename-Item -Path "$dlDir/outputSCALED.$outputFileExt" -NewName "$outputTitle.$outputFileExt"
