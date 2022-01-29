@@ -4,9 +4,9 @@
 # Written and Tested by Sheer Curiosity
 param (
 	[string]$outputTitle = "output", # Defines the output filename, without extension    Options: Any Title You Want
-	[string]$siteType = $null, # Defines the type of video being clipped                 Options: Youtube, Other
+	[string]$siteType, # Deprecated, now determined automatically                        Options: Youtube, Other
 	[Parameter(Mandatory=$true, Position=0)]
-	[string]$videoLink, # Defines input link                                             Options: YouTube Links and Direct Video File Links
+	[uri]$videoLink, # Defines input link                                                Options: YouTube Links and Direct Video File Links
 	[string]$dlDir = ".", # Defines the download directory for the final file            Options: Any Directory On Your PC
 	[Parameter(Mandatory=$true, Position=1)]
 	[string]$timestamps, # Defines the timestamps to be clipped                          Options: Timestamps In This Format (Add Comma & No Space For Multiple Subclips): [xx:xx:xx-xx:xx:xx],[xx:xx:xx-xx:xx:xx]
@@ -39,19 +39,18 @@ $ffmpegExts = @(
 )
 
 # Input Checks
-if (!$siteType) {
-	Throw "ERROR: Missing Parameters"
-}
-if ($siteType.ToLower() -ne "youtube" -and $siteType.ToLower() -ne "other") {
-	Throw "ERROR: Invalid site type"
-}
 if ($ffmpegExts -cnotcontains $outputFileExt.toLower()) {
 	Throw "ERROR: Invalid output file extension"
 }
 if ($ffmpegExts -cnotcontains $miniclipFileExt.toLower()) {
 	Throw "ERROR: Invalid output file extension"
 }
-if ($useAltCodecs -and $siteType.toLower() -eq "other") {
+if ($videoLink.Host -like "*youtube*" -or $videoLink.Host -like "*youtu.be*") {
+	$siteType = "youtube"
+} else {
+	$siteType = "other"
+}
+if ($useAltCodecs -and $siteType -eq "other") {
 	Write-Warning "Alternate codecs not supported on other video sites, ignoring -useAltCodecs parameter."
 }
 if (!$doNotStitch -and $miniclipFileExt -ne "mp4") {
@@ -217,7 +216,7 @@ function getTimestamps() {
 }
 
 $finalStartTimestamps, $finalRuntimeTimestamps = getTimestamps
-if ($siteType.toLower() -eq "youtube") {
+if ($siteType -eq "youtube") {
 	$ytdlAttempts = 0
 	while (!$avFileLinks -and $ytdlAttempts -lt 5) {
 		if ($customFormat -ne "NONE") {
@@ -238,7 +237,7 @@ if ($siteType.toLower() -eq "youtube") {
 	}
 	$vLink, $aLink = $avFileLinks.split(" ")
 }
-if ($siteType.toLower() -eq "other") {
+if ($siteType -eq "other") {
 	$ytdlAttempts = 0
 	while (!$avLink -and $ytdlAttempts -lt 5) {
 		$avLink = & $ytdlExecutable -f "best" -g "$videoLink" --add-header Accept:'*/*'
@@ -251,7 +250,7 @@ if ($siteType.toLower() -eq "other") {
 }
 
 for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
-	if ($siteType.toLower() -eq "youtube") {
+	if ($siteType -eq "youtube") {
 		if ($finalStartTimestamps.Count -eq 1) {
 			if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
 				$dlVid = Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -ss $($finalStartTimestamps[$i]) -i `"$vLink`" -t $($finalRuntimeTimestamps[$i]) -c:v copy `"$dlDir/$outputTitle.vid.mkv`"" -PassThru
@@ -279,7 +278,7 @@ for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 			}
 		}
 	}
-	if ($siteType.toLower() -eq "other") {
+	if ($siteType -eq "other") {
 		if ($finalStartTimestamps.Count -eq 1) {
 			if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
 				if ($outputFileExt -eq "mkv") {
@@ -333,7 +332,7 @@ if ($ffmpegProcesses.Count -ge 1) {
 Write-Output "Downloading Complete"
 
 for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
-	if ($siteType.toLower() -eq "youtube") {
+	if ($siteType -eq "youtube") {
 		if ($finalStartTimestamps.Count -eq 1) {
 			if ($finalStartTimestamps[$i] -eq "00:00:00.00") {
 				if ($outputFileExt -eq "mkv") {
@@ -385,7 +384,7 @@ for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 			}
 		}
 	}
-	if ($siteType.toLower() -eq "other") {
+	if ($siteType -eq "other") {
 		Write-Output "Skipping Merge Step..."
 	}
 	if ($ffmpegProcesses.Count -ge $parallelChunkSize) {
@@ -398,7 +397,7 @@ if ($ffmpegProcesses.Count -ge 1) {
 	Wait-Process -Id $ffmpegProcesses
 	$ffmpegProcesses.Clear()
 }
-if ($siteType.toLower() -eq "youtube") {
+if ($siteType -eq "youtube") {
 	Write-Output "Merging Complete"
 }
 for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
