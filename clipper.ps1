@@ -5,9 +5,11 @@
 param (
 	[string]$outputTitle = "output", # Defines the output filename, without extension    Options: Any Title You Want
 	[string]$siteType = $null, # Defines the type of video being clipped                 Options: Youtube, Other
-	[string]$videoLink = $null, # Defines input link                                     Options: YouTube Links and Direct Video File Links
+	[Parameter(Mandatory=$true, Position=0)]
+	[string]$videoLink, # Defines input link                                             Options: YouTube Links and Direct Video File Links
 	[string]$dlDir = ".", # Defines the download directory for the final file            Options: Any Directory On Your PC
-	[string]$timestamps = $null, # Defines the timestamps to be clipped                  Options: Timestamps In This Format (Add Comma & No Space For Multiple Subclips): [xx:xx:xx-xx:xx:xx],[xx:xx:xx-xx:xx:xx]
+	[Parameter(Mandatory=$true, Position=1)]
+	[string]$timestamps, # Defines the timestamps to be clipped                          Options: Timestamps In This Format (Add Comma & No Space For Multiple Subclips): [xx:xx:xx-xx:xx:xx],[xx:xx:xx-xx:xx:xx]
 	[string]$outputFileExt = "mp4", # Defines the output file extension                  Options: Any Video Extensions Supported By FFMPEG
 	[string]$miniclipFileExt = "mp4",
 	[switch]$useAltCodecs,
@@ -37,7 +39,7 @@ $ffmpegExts = @(
 )
 
 # Input Checks
-if (!$siteType -or !$videoLink -or !$timestamps) {
+if (!$siteType) {
 	Throw "ERROR: Missing Parameters"
 }
 if ($siteType.ToLower() -ne "youtube" -and $siteType.ToLower() -ne "other") {
