@@ -62,15 +62,19 @@ if (!$doNotStitch -and $miniclipFileExt -ne "mp4") {
 
 # Global Variables
 $tempdir = "./temp"
-$ffmpegExecutable = "ffmpeg.exe"
-$ytdlExecutable = "yt-dlp.exe"
 if (!(Test-Path -Path $tempdir)) {
 	mkdir $tempdir
 }
-if ($useLocalDeps) {
-	$ffmpegExecutable = "./ffmpeg.exe"
-	$ytdlExecutable = "./yt-dlp.exe"
+
+$oldPATH = $env:PATH
+$env:PATH += ";."
+$ffmpegExecutable = Get-Command -Type Application "ffmpeg.exe" -ErrorAction SilentlyContinue
+$ytdlExecutable = Get-Command -Type Application "yt-dlp.exe" -ErrorAction SilentlyContinue
+$env:PATH = $oldPATH
+if (!$ffmpegExecutable -or !$ytdlExecutable) {
+	Throw "Missing needed executables. Please make sure ffmpeg and yt-dlp are on your PATH, or in the current folder."
 }
+
 $finalStartTimestamps = [System.Collections.ArrayList]@()
 $finalRuntimeTimestamps = [System.Collections.ArrayList]@()
 $ffmpegProcesses = [System.Collections.ArrayList]@()
