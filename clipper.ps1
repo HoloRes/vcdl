@@ -18,7 +18,9 @@ param (
 	[switch]$useLocalDeps,
 	[string]$customFormat = "NONE", # For Hololive Resort's internal project manager Ikari. No documentation will be provided for this parameter, use only if you know what you're doing.
 	[switch]$isIkari, # For Hololive Resort's internal project manager Ikari. No documentation will be provided for this parameter, use only if you know what you're doing.
+	[ValidateRange(0, 30)]
 	[int]$paddingInt = 5,
+	[ValidateRange(0, [int]::MaxValue)]
 	[int]$parallelChunkSize = 5
 )
 
@@ -56,19 +58,6 @@ if ($useAltCodecs -and $siteType -eq "other") {
 if (!$doNotStitch -and $miniclipFileExt -ne "mp4") {
 	Write-Warning "-doNotStitch is false, ignoring -miniclipFileExt."
 	$miniclipFileExt = "mp4"
-}
-# Hmm, could have sworn there used to be some extra warnings here... oh well.
-if ($paddingInt -gt 30) {
-	$paddingInt = 30
-}
-if ($paddingInt -lt 0) {
-	$paddingInt = 0
-}
-if ($paddingInt -gt 60) {
-	$paddingInt = 60
-}
-if ($parallelChunkSize -lt 0) {
-	$parallelChunkSize = 0
 }
 
 # Global Variables
