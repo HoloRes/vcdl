@@ -1,25 +1,60 @@
-# HoloClipper Revision 11 Version 1
-# I regret writing this in PowerShell
+<#
+.SYNOPSIS
+	Tool for automating the clipping process
+.DESCRIPTION
+	HoloClipper Revision 11 Version 1
+	I regret writing this in PowerShell
 
-# Written and Tested by Sheer Curiosity
+	VCDL is a PowerShell-based clipping script for downloading specific portions of videos from YouTube and other video
+	sites. It runs natively on Windows, and on Linux / macOS with PowerShell installed.
+
+	Written and Tested by Sheer Curiosity
+.LINK
+	https://github.com/HoloRes/vcdl/blob/main/readme.md
+#>
 param (
-	[string]$outputTitle = "output", # Defines the output filename, without extension    Options: Any Title You Want
-	[string]$siteType, # Deprecated, now determined automatically                        Options: Youtube, Other
+	# Output filename, without extension. Any valid string works, but keep in mind not all characters are valid
+	# as part of a filname. On windows these characters are forbidden: < > : " / \ | ? *
+	[string]$outputTitle = "output",
+	# Deprecated, now determined automatically
+	[string]$siteType,
+	# Link to download video from. May be any link that yt-dlp is able to recognize.
 	[Parameter(Mandatory=$true, Position=0)]
-	[uri]$videoLink, # Defines input link                                                Options: YouTube Links and Direct Video File Links
-	[string]$dlDir = ".", # Defines the download directory for the final file            Options: Any Directory On Your PC
+	[uri]$videoLink,
+	# Output directory for the final file. Should be a directory on your PC.
+	[Alias("outputDirectory")]
+	[string]$dlDir = ".",
+	# Timestamps to be clipped. Multiple subclips are separated by commas without spaces
+	# Example: [hh:mm:ss-hh:mm:ss]
+	# Example: [hh:mm:ss-hh:mm:ss],[hh:mm:ss-hh:mm:ss]
 	[Parameter(Mandatory=$true, Position=1)]
-	[string]$timestamps, # Defines the timestamps to be clipped                          Options: Timestamps In This Format (Add Comma & No Space For Multiple Subclips): [xx:xx:xx-xx:xx:xx],[xx:xx:xx-xx:xx:xx]
-	[string]$outputFileExt = "mp4", # Defines the output file extension                  Options: Any Video Extensions Supported By FFMPEG
+	[string]$timestamps,
+	# Output file extension. May be any extension type that FFMPEG supports.
+	[string]$outputFileExt = "mp4",
+	# Output file extension. May be any extension type that FFMPEG supports.
 	[string]$miniclipFileExt = "mp4",
+	# Allows the script to download videos above 1080p using YouTube's VP9 and AV1 codecs.
+	# If set, this parameter will add extra re-encoding.
 	[switch]$useAltCodecs,
+	# Rescales the stitched clip to 1080p. Intended to be used with videos below 1080p.
 	[switch]$rescaleVideo,
+	# If more than one pair of timestamps are passed, this will save each timestamp pair as its own video.
+	# Works in conjunction with -miniclipFileExt.
 	[switch]$doNotStitch,
+	# Deprecated, now determined automatically
 	[switch]$useLocalDeps,
-	[string]$customFormat = "NONE", # For Hololive Resort's internal project manager Ikari. No documentation will be provided for this parameter, use only if you know what you're doing.
-	[switch]$isIkari, # For Hololive Resort's internal project manager Ikari. No documentation will be provided for this parameter, use only if you know what you're doing.
+	# For Hololive Resort's internal project manager Ikari. No documentation will be provided for this parameter,
+	# use only if you know what you're doing.
+	[string]$customFormat = "NONE",
+	# For Hololive Resort's internal project manager Ikari. No documentation will be provided for this parameter,
+	# use only if you know what you're doing.
+	[switch]$isIkari,
+	# Specifies the amount of time, in seconds, to add to the start and end of each miniclip. Between 0 and 30.
+	# This extra time is referred to as the "time buffer" in the online docs.
 	[ValidateRange(0, 30)]
 	[int]$paddingInt = 5,
+	# Specifies the maximum number of ffmpeg processes to run in parallel. Mainly used to help lower the memory
+	# footprint of the script. Setting this to a value over 10 is not advised, do so at your own risk.
 	[ValidateRange(0, [int]::MaxValue)]
 	[int]$parallelChunkSize = 5
 )
