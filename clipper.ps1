@@ -10,12 +10,12 @@ param (
 	[string]$timestamps = $null, # Defines the timestamps to be clipped                  Options: Timestamps In This Format (Add Comma & No Space For Multiple Subclips): [xx:xx:xx-xx:xx:xx],[xx:xx:xx-xx:xx:xx]
 	[string]$outputFileExt = "mp4", # Defines the output file extension                  Options: Any Video Extensions Supported By FFMPEG
 	[string]$miniclipFileExt = "mp4",
-	[string]$useAltCodecs = "false",
-	[string]$rescaleVideo = "false",
-	[string]$doNotStitch = "false",
-	[string]$useLocalDeps = "false",
+	[switch]$useAltCodecs,
+	[switch]$rescaleVideo,
+	[switch]$doNotStitch,
+	[switch]$useLocalDeps,
 	[string]$customFormat = "NONE", # For Hololive Resort's internal project manager Ikari. No documentation will be provided for this parameter, use only if you know what you're doing.
-	[string]$isIkari = "false", # For Hololive Resort's internal project manager Ikari. No documentation will be provided for this parameter, use only if you know what you're doing.
+	[switch]$isIkari, # For Hololive Resort's internal project manager Ikari. No documentation will be provided for this parameter, use only if you know what you're doing.
 	[int]$paddingInt = 5,
 	[int]$parallelChunkSize = 5
 )
@@ -40,15 +40,6 @@ $ffmpegExts = @(
 if (!$siteType -or !$videoLink -or !$timestamps) {
 	Throw "ERROR: Missing Parameters"
 }
-if ($useAltCodecs.toLower() -ne "false" -and $useAltCodecs.toLower() -ne "true") {
-	Throw "ERROR: Invalid input for parameter -useAltCodecs"
-}
-if ($rescaleVideo.toLower() -ne "false" -and $rescaleVideo.toLower() -ne "true") {
-	Throw "ERROR: Invalid input for parameter -rescaleVideo"
-}
-if ($doNotStitch.toLower() -ne "false" -and $doNotStitch.toLower() -ne "true") {
-	Throw "ERROR: Invalid input for parameter -doNotStitch"
-}
 if ($siteType.ToLower() -ne "youtube" -and $siteType.ToLower() -ne "other") {
 	Throw "ERROR: Invalid site type"
 }
@@ -58,11 +49,11 @@ if ($ffmpegExts -cnotcontains $outputFileExt.toLower()) {
 if ($ffmpegExts -cnotcontains $miniclipFileExt.toLower()) {
 	Throw "ERROR: Invalid output file extension"
 }
-if ($useAltCodecs.toLower() -eq "true" -and $siteType.toLower() -eq "other") {
+if ($useAltCodecs -and $siteType.toLower() -eq "other") {
 	Write-Warning "Alternate codecs not supported on other video sites, ignoring -useAltCodecs parameter."
 }
-if ($doNotStitch.toLower() -ne "true" -and $miniclipFileExt -ne "mp4") {
-	Write-Warning "-doNotStitch is unspecified or false, ignoring -miniclipFileExt."
+if (!$doNotStitch -and $miniclipFileExt -ne "mp4") {
+	Write-Warning "-doNotStitch is false, ignoring -miniclipFileExt."
 	$miniclipFileExt = "mp4"
 }
 # Hmm, could have sworn there used to be some extra warnings here... oh well.
@@ -86,7 +77,7 @@ $ytdlExecutable = "yt-dlp.exe"
 if (!(Test-Path -Path $tempdir)) {
 	mkdir $tempdir
 }
-if ($useLocalDeps.toLower() -eq "true") {
+if ($useLocalDeps) {
 	$ffmpegExecutable = "./ffmpeg.exe"
 	$ytdlExecutable = "./yt-dlp.exe"
 }
@@ -231,7 +222,7 @@ if ($siteType.toLower() -eq "youtube") {
 			$avFileLinks = & $ytdlExecutable -f $customFormat -g --youtube-skip-dash-manifest "$videoLink"
 			$ytdlAttempts++
 		} else {
-			if ($useAltCodecs.toLower() -eq "true") {
+			if ($useAltCodecs) {
 				$avFileLinks = & $ytdlExecutable -f "bestvideo[vcodec^=av01]+bestaudio[acodec^=mp4a]/best[vcodec^=av01]" -g --youtube-skip-dash-manifest "$videoLink"
 			} else {
 				$avFileLinks = & $ytdlExecutable -f "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/best[vcodec^=avc1]" -g --youtube-skip-dash-manifest "$videoLink"
@@ -346,7 +337,7 @@ for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 				if ($outputFileExt -eq "mkv") {
 					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$dlDir/$outputTitle.vid.mkv`" -i `"$dlDir/$outputTitle.aud.m4a`" -c copy `"$dlDir/$outputTitle.mkv`"" -PassThru
 					[void]$ffmpegProcesses.Add($mergeClips.Id)
-				} elseif ($outputFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
+				} elseif ($outputFileExt -eq "mp4" -and !$useAltCodecs) {
 					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$dlDir/$outputTitle.vid.mkv`" -i `"$dlDir/$outputTitle.aud.m4a`" -c copy `"$dlDir/$outputTitle.mp4`"" -PassThru
 					[void]$ffmpegProcesses.Add($mergeClips.Id)
 				} else {
@@ -357,7 +348,7 @@ for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 				if ($outputFileExt -eq "mkv") {
 					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$dlDir/$outputTitle.vid.mkv`" -i `"$dlDir/$outputTitle.aud.m4a`" -c copy `"$dlDir/$outputTitle.mkv`"" -PassThru
 					[void]$ffmpegProcesses.Add($mergeClips.Id)
-				} elseif ($outputFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
+				} elseif ($outputFileExt -eq "mp4" -and !$useAltCodecs) {
 					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$dlDir/$outputTitle.vid.mkv`" -i `"$dlDir/$outputTitle.aud.m4a`" -c copy `"$dlDir/$outputTitle.mp4`"" -PassThru
 					[void]$ffmpegProcesses.Add($mergeClips.Id)
 				} else {
@@ -371,7 +362,7 @@ for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 				if ($miniclipFileExt -eq "mkv") {
 					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$tempdir/clip$($i+1).vid.mkv`" -i `"$tempdir/clip$($i+1).aud.m4a`" -c copy `"$tempdir/clip$($i+1).mkv`"" -PassThru
 					[void]$ffmpegProcesses.Add($mergeClips.Id)
-				} elseif ($miniclipFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
+				} elseif ($miniclipFileExt -eq "mp4" -and !$useAltCodecs) {
 					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$tempdir/clip$($i+1).vid.mkv`" -i `"$tempdir/clip$($i+1).aud.m4a`" -c copy `"$tempdir/clip$($i+1).mp4`"" -PassThru
 					[void]$ffmpegProcesses.Add($mergeClips.Id)
 				} else {
@@ -382,7 +373,7 @@ for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 				if ($miniclipFileExt -eq "mkv") {
 					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$tempdir/clip$($i+1).vid.mkv`" -i `"$tempdir/clip$($i+1).aud.m4a`" -c copy `"$tempdir/clip$($i+1).mkv`"" -PassThru
 					[void]$ffmpegProcesses.Add($mergeClips.Id)
-				} elseif ($miniclipFileExt -eq "mp4" -and $useAltCodecs.toLower() -eq "false") {
+				} elseif ($miniclipFileExt -eq "mp4" -and !$useAltCodecs) {
 					$mergeClips= Start-Process -NoNewWindow $ffmpegExecutable -RedirectStandardError "NUL" -ArgumentList "-y -i `"$tempdir/clip$($i+1).vid.mkv`" -i `"$tempdir/clip$($i+1).aud.m4a`" -c copy `"$tempdir/clip$($i+1).mp4`"" -PassThru
 					[void]$ffmpegProcesses.Add($mergeClips.Id)
 				} else {
@@ -419,7 +410,7 @@ for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 	}
 }
 
-if ($doNotStitch.toLower() -eq "true") {
+if ($doNotStitch) {
 	for ($i = 0; $i -lt $finalStartTimestamps.Count; $i++) {
 		Move-Item -Path "$tempdir/clip$($i+1).$miniclipFileExt" -Destination "$dlDir/$outputTitle`_clip$($i+1).$miniclipFileExt"
 	}
@@ -433,7 +424,7 @@ if ($finalStartTimestamps.Count -ge 2) {
 	$stitchCmdMapInputs = $stitchCmdMapInputs + "concat=n=$($finalStartTimestamps.Count)`:v=1:a=1[outv][outa]"
 	$stitchCmd = "$ffmpegExecutable -y $stitchCmdInputs-crf 18 -filter_complex `"$stitchCmdMapInputs`" -map `"[outv]`" -map `"[outa]`" `"$dlDir/output.$outputFileExt`""
 	Invoke-Expression $stitchCmd
-	if ($rescaleVideo.toLower() -eq "true") {
+	if ($rescaleVideo) {
 		& $ffmpegExecutable -i "$dlDir/output.$outputFileExt" -vf scale=1920x1080:flags=bicubic "$dlDir/outputSCALED.$outputFileExt"
 		Remove-Item -Path "$dlDir/output.$outputFileExt"
     Rename-Item -Path "$dlDir/outputSCALED.$outputFileExt" -NewName "$outputTitle.$outputFileExt"
