@@ -41,10 +41,7 @@ $ffmpegExts = @(
 )
 
 # Input Checks
-if ($ffmpegExts -cnotcontains $outputFileExt.toLower()) {
-	Throw "ERROR: Invalid output file extension"
-}
-if ($ffmpegExts -cnotcontains $miniclipFileExt.toLower()) {
+if ($ffmpegExts -notcontains $outputFileExt -or $ffmpegExts -notcontains $miniclipFileExt) {
 	Throw "ERROR: Invalid output file extension"
 }
 if ($videoLink.Host -like "*youtube*" -or $videoLink.Host -like "*youtu.be*") {
